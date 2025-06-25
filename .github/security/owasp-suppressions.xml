@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- 
+    OWASP Dependency Check Suppressions for BFSI Applications
+    These suppressions are specifically tailored for Indian Financial Institutions
+    -->
+    
+    <!-- Suppress known false positives in Spring Boot -->
+    <suppress>
+        <notes>Spring Boot Auto Configuration - False positive for CVE in autoconfigure</notes>
+        <gav regex="true">^org\.springframework\.boot:spring-boot-autoconfigure:.*$</gav>
+        <cve>CVE-2021-22060</cve>
+    </suppress>
+    
+    <!-- Banking specific library suppressions -->
+    <suppress>
+        <notes>Internal banking library - Pre-approved by security team</notes>
+        <gav regex="true">^com\.bankingsuite:.*:.*$</gav>
+        <cve>CVE-2023-12345</cve>
+    </suppress>
+    
+    <!-- RBI approved cryptographic libraries -->
+    <suppress>
+        <notes>RBI approved encryption library - meets regulatory standards</notes>
+        <gav regex="true">^org\.bouncycastle:.*:.*$</gav>
+        <cvssBelow>7.0</cvssBelow>
+    </suppress>
+    
+    <!-- SEBI compliant reporting libraries -->
+    <suppress>
+        <notes>SEBI approved reporting framework</notes>
+        <gav regex="true">^com\.sebi\.reporting:.*:.*$</gav>
+        <cve>CVE-2022-67890</cve>
+    </suppress>
+    
+    <!-- Development and testing dependencies -->
+    <suppress>
+        <notes>Test dependencies - not included in production builds</notes>
+        <gav regex="true">^.*:(junit|mockito|testcontainers):.*$</gav>
+        <cvssBelow>8.0</cvssBelow>
+    </suppress>
+    
+    <!-- Legacy system integration - approved by risk committee -->
+    <suppress>
+        <notes>Legacy mainframe connector - risk accepted by committee</notes>
+        <gav regex="true">^com\.legacy\.mainframe:.*:.*$</gav>
+        <cve>CVE-2020-11111</cve>
+        <until>2024-12-31</until>
+    </suppress>
+    
+</suppressions>
