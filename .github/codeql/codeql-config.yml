@@ -1,0 +1,53 @@
+name: "BFSI CodeQL Configuration"
+disable-default-queries: false
+
+queries:
+  - name: "Financial Services Security"
+    uses: security-extended
+    include:
+      - java/sql-injection
+      - java/unsafe-deserialization
+      - java/sensitive-data-exposure
+      - java/weak-cryptographic-algorithm
+      - java/hardcoded-credentials
+      - java/path-traversal
+      - java/xss
+      - java/command-injection
+      - java/zip-slip
+      - java/unsafe-reflection
+
+  - name: "Banking Specific"
+    uses: ./codeql-queries/banking/
+    include:
+      - banking/weak-password-policy
+      - banking/insecure-random-generation
+      - banking/improper-certificate-validation
+      - banking/sensitive-info-in-logs
+      - banking/insufficient-session-expiration
+
+  - name: "PII and Financial Data Protection"
+    uses: ./codeql-queries/privacy/
+    include:
+      - privacy/pii-exposure
+      - privacy/financial-data-logging
+      - privacy/insecure-data-transmission
+      - privacy/weak-data-encryption
+
+paths-ignore:
+  - "**/*.test.java"
+  - "**/target/**"
+  - "**/*.md"
+  - "**/docs/**"
+
+paths:
+  - "src/main/java/**"
+  - "!src/test/**"
+
+# Additional configuration for BFSI compliance
+external-repository-token: ${{ secrets.GITHUB_TOKEN }}
+registries:
+  - url: "https://github.com/github/codeql-queries-bfsi"
+    packages: 
+      - "bfsi/java-security-queries"
+      - "rbi/compliance-queries"
+      - "sebi/governance-queries"

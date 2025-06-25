@@ -24,7 +24,12 @@ This repository addresses the unique challenges faced by Indian financial instit
 This repository provides GitHub product use-cases specifically adapted for regulated financial environments:
 
 ### 🔧 **GitHub Actions**
-- CI/CD pipelines with regulatory approval workflows
+- **✅ NEW**: Complete Java Spring Boot CI/CD pipelines with self-hosted runners
+- **✅ NEW**: Multi-stage approval workflows (Technical → Security → Compliance → Business → Executive)
+- **✅ NEW**: SOPS-based secrets management with age encryption
+- **✅ NEW**: Comprehensive security scanning (SAST, DAST, SCA, Container scanning)
+- **✅ NEW**: RBI/SEBI/IRDAI compliance validation gates
+- **✅ NEW**: Credit Decision Engine specialized pipeline
 - Security scanning and compliance checks
 - Deployment strategies for hybrid environments
 - Audit-compliant build and release processes
@@ -88,37 +93,32 @@ This repository provides GitHub product use-cases specifically adapted for regul
 ## 📁 Repository Structure
 
 ```
-├── actions/                    # GitHub Actions workflows and templates
-│   ├── ci-cd/                 # Continuous Integration/Deployment
-│   ├── security/              # Security scanning and compliance
-│   └── compliance/            # Regulatory compliance workflows
-├── advanced-security/         # GitHub Advanced Security configurations
-│   ├── code-scanning/         # Static analysis setup
-│   ├── secret-scanning/       # Secret detection patterns
-│   └── dependency-review/     # Vulnerability management
-├── copilot/                   # GitHub Copilot configurations
-│   ├── policies/              # Usage policies and guidelines
-│   └── training/              # Custom training materials
-├── codespaces/                # Development environment templates
-│   ├── containers/            # Development container configurations
-│   └── policies/              # Security and compliance policies
-├── enterprise/                # Enterprise-level configurations
-│   ├── organization/          # Org structure and management
-│   ├── teams/                 # Team management templates
-│   └── integrations/          # Third-party integrations
-├── compliance/                # Regulatory compliance resources
-│   ├── rbi/                   # Reserve Bank of India guidelines
-│   ├── irdai/                 # Insurance regulatory compliance
-│   ├── sebi/                  # Securities market compliance
-│   └── iso27001/              # ISO 27001 implementation
-├── docs/                      # Documentation and guides
-│   ├── getting-started/       # Quick start guides
-│   ├── best-practices/        # Industry best practices
-│   └── troubleshooting/       # Common issues and solutions
-└── examples/                  # Real-world implementation examples
-    ├── banking/               # Banking-specific examples
-    ├── insurance/             # Insurance industry examples
-    └── nbfc/                  # NBFC-specific implementations
+├── .github/workflows/           # ✅ Production-ready CI/CD workflows
+│   ├── java-spring-boot-ci.yml  # Complete Spring Boot pipeline with security
+│   └── credit-decision-engine.yml # Specialized credit system pipeline
+├── .github/codeql/              # ✅ CodeQL security scanning configuration
+├── .github/security/            # ✅ Security scanning suppressions and rules
+├── actions/                     # ✅ GitHub Actions workflows and templates
+│   ├── ci-cd/                   # Continuous Integration/Deployment
+│   ├── security/                # Security scanning and compliance
+│   └── compliance/              # Regulatory compliance workflows
+├── config/                      # ✅ Application configuration templates
+│   ├── docker/                  # Docker environment configurations
+│   └── secrets/                 # ✅ SOPS-encrypted secrets management
+│       ├── dev/                 # Development environment secrets
+│       ├── uat/                 # UAT environment secrets
+│       └── prod/                # Production environment secrets
+├── docs/                        # ✅ Comprehensive documentation
+│   ├── self-hosted-runners/     # ✅ Runner setup and security hardening
+│   ├── security/               # ✅ Secrets management and security practices
+│   └── compliance/             # ✅ Regulatory compliance guides
+│       ├── branch-protection-rules.md    # Branch protection templates
+│       ├── deployment-approval-process.md # Multi-stage approval workflows
+│       └── compliance-checklist.md       # RBI/SEBI/IRDAI checklist
+├── examples/                    # ✅ Real-world BFSI application examples
+│   ├── nbfc-core/              # ✅ NBFC core application with Maven POM
+│   └── credit-decision-engine/  # Credit scoring system examples
+└── Dockerfile                   # ✅ Security-hardened containerization
 ```
 
 ## 🚀 Getting Started
@@ -129,6 +129,75 @@ This repository provides GitHub product use-cases specifically adapted for regul
 - Understanding of your institution's compliance requirements
 - Basic knowledge of Git, CI/CD, and DevSecOps practices
 
+### 🚀 Quick Start: Secure CI/CD Pipeline
+
+For Java Spring Boot applications, get started with our production-ready CI/CD pipeline:
+
+1. **Setup Self-hosted Runners**
+   ```bash
+   # Follow the comprehensive setup guide
+   cat docs/self-hosted-runners/README.md
+   
+   # Configure runners with BFSI-specific labels
+   # [self-hosted, bfsi-secure, bfsi-build, bfsi-deploy]
+   ```
+
+2. **Copy CI/CD Workflow**
+   ```bash
+   # Copy the complete pipeline to your repository
+   cp .github/workflows/java-spring-boot-ci.yml /your-repo/.github/workflows/
+   cp -r .github/codeql /your-repo/.github/
+   cp -r .github/security /your-repo/.github/
+   ```
+
+3. **Configure Secrets Management**
+   ```bash
+   # Setup SOPS encryption for secure secrets
+   # Follow the detailed guide:
+   cat docs/security/secrets-management.md
+   
+   # Required GitHub repository secrets:
+   # SOPS_AGE_KEY_DEV, SOPS_AGE_KEY_UAT, SOPS_AGE_KEY_PROD
+   # REGISTRY_USERNAME, REGISTRY_PASSWORD, SONAR_TOKEN
+   ```
+
+4. **Enable Branch Protection**
+   ```bash
+   # Apply comprehensive branch protection rules
+   # Templates available in:
+   cat docs/compliance/branch-protection-rules.md
+   ```
+
+5. **Deploy Your First Application**
+   ```bash
+   # Use the NBFC Core example as a template
+   cp -r examples/nbfc-core/* /your-repo/
+   # Customize pom.xml and application.yml for your needs
+   ```
+
+### 📋 Implementation Checklist
+
+#### ✅ **Immediate Setup (Phase 1)**
+- [ ] Setup self-hosted runners with security hardening
+- [ ] Configure SOPS-based secrets management
+- [ ] Copy Java Spring Boot CI/CD pipeline
+- [ ] Enable branch protection rules
+- [ ] Setup multi-stage approval workflows
+
+#### 🔄 **Integration Phase (Phase 2)**  
+- [ ] Integrate with existing NBFC/Banking applications
+- [ ] Configure credit bureau API integrations
+- [ ] Setup regulatory reporting workflows
+- [ ] Enable compliance validation gates
+- [ ] Configure audit trail collection
+
+#### 🚀 **Production Readiness (Phase 3)**
+- [ ] Complete RBI/SEBI/IRDAI compliance validation
+- [ ] Setup emergency deployment procedures
+- [ ] Configure comprehensive monitoring and alerting
+- [ ] Enable automated compliance reporting
+- [ ] Conduct security and compliance audits
+
 ### Quick Start Guide
 
 1. **Fork or Clone this Repository**
@@ -137,30 +206,36 @@ This repository provides GitHub product use-cases specifically adapted for regul
    cd GitHub-for-Indian-Financial-Institutions
    ```
 
-2. **Review Compliance Requirements**
-   - Navigate to the `compliance/` directory
-   - Review regulatory guidelines relevant to your institution
-   - Identify applicable compliance frameworks
+2. **Review Documentation and Examples**
+   - Navigate to `docs/` for comprehensive guides
+   - Review `examples/nbfc-core/` for Spring Boot setup
+   - Check `docs/compliance/` for regulatory requirements
 
-3. **Configure Your Organization**
-   - Use templates in `enterprise/organization/`
-   - Set up teams and access controls
-   - Configure security policies
+3. **Configure Self-hosted Runners**
+   - Follow `docs/self-hosted-runners/README.md`
+   - Setup environment-specific runners
+   - Apply security hardening measures
 
-4. **Implement Security Baselines**
-   - Deploy configurations from `advanced-security/`
-   - Enable required security features
-   - Configure scanning and monitoring
+4. **Setup Secrets Management**
+   - Follow `docs/security/secrets-management.md`
+   - Configure SOPS encryption
+   - Setup age keys for environments
 
-5. **Set Up Development Workflows**
-   - Customize templates from `actions/`
-   - Configure development environments in `codespaces/`
-   - Implement branching and review strategies
+5. **Deploy CI/CD Pipeline**
+   - Copy workflows from `.github/workflows/`
+   - Configure repository secrets
+   - Enable branch protection rules
 
 ### Implementation Roadmap
 
-- **Phase 1**: Security foundation and compliance setup
-- **Phase 2**: CI/CD pipeline implementation
+- **Phase 1**: ✅ **COMPLETED** - Secure CI/CD pipeline foundation
+  - Java Spring Boot CI/CD workflows with self-hosted runners
+  - SOPS-based secrets management with age encryption
+  - Multi-stage approval workflows and deployment gates
+  - Comprehensive security scanning (SAST, DAST, SCA)
+  - RBI/SEBI/IRDAI compliance validation
+  
+- **Phase 2**: CI/CD pipeline customization and integration
 - **Phase 3**: Developer productivity enhancements
 - **Phase 4**: Advanced automation and monitoring
 

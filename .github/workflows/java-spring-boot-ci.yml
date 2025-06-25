@@ -1,0 +1,382 @@
+name: 'BFSI Java Spring Boot CI/CD Pipeline'
+
+on:
+  push:
+    branches: [ main, develop, 'release/*' ]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      runner_type:
+        description: 'Runner type to use'
+        required: false
+        default: 'github-hosted'
+        type: choice
+        options:
+          - 'github-hosted'
+          - 'self-hosted'
+      environment:
+        description: 'Target environment'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+          - 'development'
+          - 'staging'
+          - 'production'
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_VERSION: '3.9.0'
+  REGISTRY: 'your-private-registry.com'
+  IMAGE_NAME: 'nbfc-core'
+  # Runner configuration - Default to GitHub hosted for cost efficiency and GitHub product maximization
+  USE_GITHUB_HOSTED: ${{ github.event.inputs.runner_type == 'github-hosted' || (github.event.inputs.runner_type == '' && github.ref != 'refs/heads/main') }}
+  # Production deployments and sensitive operations should use self-hosted runners
+  FORCE_SELF_HOSTED: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[production]') }}
+
+jobs:
+  # Security and Compliance Checks
+  security-scan:
+    name: '🔒 Security Scanning'
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-secure"]') }}
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for security analysis
+
+      - name: '🔍 CodeQL Analysis'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: 'Set up JDK'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: '📦 Cache Maven Dependencies'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: '🔨 Compile for Security Analysis'
+        run: mvn clean compile -DskipTests
+
+      - name: '🔍 Perform CodeQL Analysis'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:java'
+
+      - name: '🛡️ OWASP Dependency Check'
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -Dformat=ALL \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionsFile=.github/security/owasp-suppressions.xml
+
+      - name: '📊 Upload Security Reports'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+          retention-days: 30
+
+  # Build and Test
+  build-and-test:
+    name: '🔨 Build & Test'
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-build"]') }}
+    needs: security-scan
+    strategy:
+      matrix:
+        profile: [dev, uat]
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+
+      - name: 'Set up JDK'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: '📦 Cache Maven Dependencies'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: '🔐 Decrypt Application Secrets'
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          # Install SOPS for secret management
+          curl -LO https://github.com/mozilla/sops/releases/download/v3.8.1/sops-v3.8.1.linux.amd64
+          chmod +x sops-v3.8.1.linux.amd64
+          sudo mv sops-v3.8.1.linux.amd64 /usr/local/bin/sops
+          # Decrypt environment-specific secrets
+          sops -d config/secrets/${{ matrix.profile }}/application-secrets.enc.yml > src/main/resources/application-${{ matrix.profile }}.yml
+
+      - name: '🔨 Build Application'
+        run: |
+          mvn clean compile -P${{ matrix.profile }} \
+            -Dmaven.test.skip=false \
+            -Dspring.profiles.active=${{ matrix.profile }}
+
+      - name: '🧪 Run Unit Tests'
+        run: |
+          mvn test -P${{ matrix.profile }} \
+            -Dspring.profiles.active=${{ matrix.profile }} \
+            -Dmaven.test.failure.ignore=false
+
+      - name: '🧪 Run Integration Tests'
+        run: |
+          mvn verify -P${{ matrix.profile }} \
+            -Dspring.profiles.active=${{ matrix.profile }} \
+            -DskipUTs=true
+
+      - name: '📊 Generate Test Reports'
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: 'Test Results (${{ matrix.profile }})'
+          path: 'target/surefire-reports/*.xml'
+          reporter: java-junit
+          fail-on-error: true
+
+      - name: '📦 Package Application'
+        run: |
+          mvn package -P${{ matrix.profile }} \
+            -DskipTests \
+            -Dspring.profiles.active=${{ matrix.profile }}
+
+      - name: '📤 Upload Build Artifacts'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-artifact-${{ matrix.profile }}
+          path: target/*.jar
+          retention-days: 7
+
+  # Quality Gate and Code Analysis
+  quality-gate:
+    name: '🚥 Quality Gate'
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-quality"]') }}
+    needs: build-and-test
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Set up JDK'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: '📦 Cache SonarCloud Packages'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: '📦 Cache Maven Dependencies'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: '🔍 SonarQube Analysis'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn clean verify sonar:sonar \
+            -Dsonar.projectKey=bfsi-nbfc-core \
+            -Dsonar.organization=your-org \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -Dsonar.qualitygate.wait=true
+
+  # Approval Gate for Production Deployments (Always self-hosted for compliance)
+  approval-gate:
+    name: '✅ Deployment Approval'
+    runs-on: [self-hosted, bfsi-approval]  # Always self-hosted for regulatory compliance
+    needs: [quality-gate]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production-approval
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: '📋 Manual Approval Required'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: bfsi-release-managers,security-team,compliance-officers
+          minimum-approvals: 2
+          issue-title: 'Production Deployment Approval Required'
+          issue-body: |
+            **Deployment Details:**
+            - Application: NBFC Core System
+            - Version: ${{ github.sha }}
+            - Environment: Production
+            - Requestor: ${{ github.actor }}
+            
+            **Security Checklist:**
+            - [ ] Security scan passed
+            - [ ] Vulnerability assessment completed
+            - [ ] Compliance requirements verified
+            - [ ] Change management approval obtained
+            
+            **Deployment Approval Required by:**
+            - Security Team Lead
+            - Compliance Officer
+            - Release Manager
+            
+            Please review and approve this deployment.
+
+  # Container Build and Registry Push
+  container-build:
+    name: '🐳 Container Build'
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-docker"]') }}
+    needs: [quality-gate]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+
+      - name: '📥 Download Build Artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          name: jar-artifact-dev
+          path: target/
+
+      - name: '🔐 Configure Container Registry'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: '🏷️ Extract Metadata'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: '🔨 Build and Push Container'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            JAR_FILE=target/*.jar
+            BUILD_DATE=${{ steps.meta.outputs.labels }}
+            VERSION=${{ github.sha }}
+
+      - name: '🛡️ Container Security Scan'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: '📤 Upload Container Scan Results'
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  # Deployment to Environments (Always self-hosted for security and compliance)
+  deploy-dev:
+    name: '🚀 Deploy to Development'
+    runs-on: [self-hosted, bfsi-deploy-dev]  # Always self-hosted for environment access
+    needs: [container-build]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: development
+      url: https://dev.nbfc-core.internal
+    steps:
+      - name: '🚀 Deploy to Development Environment'
+        run: |
+          echo "Deploying to Development Environment"
+          # Add deployment scripts here
+          # kubectl apply -f k8s/dev/
+          # helm upgrade --install nbfc-core-dev ./helm-chart
+
+  deploy-uat:
+    name: '🚀 Deploy to UAT'
+    runs-on: [self-hosted, bfsi-deploy-uat]  # Always self-hosted for environment access
+    needs: [container-build]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: uat
+      url: https://uat.nbfc-core.internal
+    steps:
+      - name: '🚀 Deploy to UAT Environment'
+        run: |
+          echo "Deploying to UAT Environment"
+          # Add deployment scripts here
+
+  deploy-prod:
+    name: '🚀 Deploy to Production'
+    runs-on: [self-hosted, bfsi-deploy-prod]  # Always self-hosted for production security
+    needs: [approval-gate, container-build]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://prod.nbfc-core.internal
+    steps:
+      - name: '🚀 Deploy to Production Environment'
+        run: |
+          echo "Deploying to Production Environment"
+          # Add deployment scripts here
+
+  # Audit and Compliance Reporting (Always self-hosted for regulatory compliance)
+  audit-trail:
+    name: '📋 Audit Trail & Compliance'
+    runs-on: [self-hosted, bfsi-audit]  # Always self-hosted for audit and compliance
+    needs: [deploy-prod]
+    if: always()
+    steps:
+      - name: '📊 Generate Deployment Report'
+        run: |
+          echo "Generating comprehensive audit trail and compliance report"
+          # Generate audit reports for regulatory compliance
+          
+      - name: '📤 Upload Audit Reports'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-trail-${{ github.run_number }}
+          path: |
+            audit-reports/
+            compliance-reports/
+          retention-days: 365  # Long retention for regulatory requirements
