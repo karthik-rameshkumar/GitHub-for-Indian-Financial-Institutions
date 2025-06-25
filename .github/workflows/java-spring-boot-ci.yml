@@ -13,18 +13,41 @@ on:
       - 'src/**'
       - 'pom.xml'
       - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      runner_type:
+        description: 'Runner type to use'
+        required: false
+        default: 'github-hosted'
+        type: choice
+        options:
+          - 'github-hosted'
+          - 'self-hosted'
+      environment:
+        description: 'Target environment'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+          - 'development'
+          - 'staging'
+          - 'production'
 
 env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.0'
   REGISTRY: 'your-private-registry.com'
   IMAGE_NAME: 'nbfc-core'
+  # Runner configuration - Default to GitHub hosted for cost efficiency and GitHub product maximization
+  USE_GITHUB_HOSTED: ${{ github.event.inputs.runner_type == 'github-hosted' || (github.event.inputs.runner_type == '' && github.ref != 'refs/heads/main') }}
+  # Production deployments and sensitive operations should use self-hosted runners
+  FORCE_SELF_HOSTED: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[production]') }}
 
 jobs:
   # Security and Compliance Checks
   security-scan:
     name: '🔒 Security Scanning'
-    runs-on: [self-hosted, bfsi-secure]
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-secure"]') }}
     steps:
       - name: 'Checkout Code'
         uses: actions/checkout@v4
@@ -78,7 +101,7 @@ jobs:
   # Build and Test
   build-and-test:
     name: '🔨 Build & Test'
-    runs-on: [self-hosted, bfsi-build]
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-build"]') }}
     needs: security-scan
     strategy:
       matrix:
@@ -154,7 +177,7 @@ jobs:
   # Quality Gate and Code Analysis
   quality-gate:
     name: '🚥 Quality Gate'
-    runs-on: [self-hosted, bfsi-quality]
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-quality"]') }}
     needs: build-and-test
     steps:
       - name: 'Checkout Code'
@@ -194,10 +217,10 @@ jobs:
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.qualitygate.wait=true
 
-  # Approval Gate for Production Deployments
+  # Approval Gate for Production Deployments (Always self-hosted for compliance)
   approval-gate:
     name: '✅ Deployment Approval'
-    runs-on: [self-hosted, bfsi-approval]
+    runs-on: [self-hosted, bfsi-approval]  # Always self-hosted for regulatory compliance
     needs: [quality-gate]
     if: github.ref == 'refs/heads/main'
     environment:
@@ -234,7 +257,7 @@ jobs:
   # Container Build and Registry Push
   container-build:
     name: '🐳 Container Build'
-    runs-on: [self-hosted, bfsi-docker]
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-docker"]') }}
     needs: [quality-gate]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     steps:
@@ -291,10 +314,10 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-  # Deployment to Environments
+  # Deployment to Environments (Always self-hosted for security and compliance)
   deploy-dev:
     name: '🚀 Deploy to Development'
-    runs-on: [self-hosted, bfsi-deploy-dev]
+    runs-on: [self-hosted, bfsi-deploy-dev]  # Always self-hosted for environment access
     needs: [container-build]
     if: github.ref == 'refs/heads/develop'
     environment:
@@ -310,7 +333,7 @@ jobs:
 
   deploy-uat:
     name: '🚀 Deploy to UAT'
-    runs-on: [self-hosted, bfsi-deploy-uat]
+    runs-on: [self-hosted, bfsi-deploy-uat]  # Always self-hosted for environment access
     needs: [container-build]
     if: github.ref == 'refs/heads/main'
     environment:
@@ -324,7 +347,7 @@ jobs:
 
   deploy-prod:
     name: '🚀 Deploy to Production'
-    runs-on: [self-hosted, bfsi-deploy-prod]
+    runs-on: [self-hosted, bfsi-deploy-prod]  # Always self-hosted for production security
     needs: [approval-gate, container-build]
     if: github.ref == 'refs/heads/main'
     environment:
@@ -336,10 +359,10 @@ jobs:
           echo "Deploying to Production Environment"
           # Add deployment scripts here
 
-  # Audit and Compliance Reporting
+  # Audit and Compliance Reporting (Always self-hosted for regulatory compliance)
   audit-trail:
     name: '📋 Audit Trail & Compliance'
-    runs-on: [self-hosted, bfsi-audit]
+    runs-on: [self-hosted, bfsi-audit]  # Always self-hosted for audit and compliance
     needs: [deploy-prod]
     if: always()
     steps:

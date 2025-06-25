@@ -1,9 +1,316 @@
-# Self-hosted Runner Configuration for Indian Financial Institutions
+# Runner Configuration for Indian Financial Institutions
 
 ## Overview
-This document provides comprehensive guidance for setting up and configuring self-hosted GitHub Actions runners in Indian Financial Institution environments, addressing regulatory compliance, security requirements, and operational constraints.
+This document provides comprehensive guidance for configuring GitHub Actions runners in Indian Financial Institution environments, covering both **GitHub hosted runners** and **self-hosted runners** to maximize GitHub product usage while addressing regulatory compliance, security requirements, and operational constraints.
 
-## Regulatory Considerations
+## Runner Selection Strategy
+
+### GitHub Hosted Runners vs Self-hosted Runners
+
+| **Aspect** | **GitHub Hosted Runners** | **Self-hosted Runners** |
+|------------|---------------------------|-------------------------|
+| **Best for** | Development, testing, CI builds | Production, compliance, sensitive operations |
+| **Cost** | Pay-per-use, cost-effective for development | Fixed infrastructure cost |
+| **Maintenance** | Zero maintenance, always updated | Requires maintenance, patching, monitoring |
+| **Security** | GitHub-managed, secure by default | Full control, customizable security |
+| **Compliance** | Limited compliance controls | Full regulatory compliance |
+| **Network Access** | Public internet only | Internal network access |
+| **Customization** | Limited | Full customization |
+| **Data Locality** | Global GitHub infrastructure | On-premises, data localization compliant |
+
+### Recommended Usage Pattern
+
+**🟢 Use GitHub Hosted Runners for:**
+- Feature branch builds and testing
+- Pull request validation
+- Development environment deployments
+- Code quality checks and linting
+- Unit and integration testing
+- Open source dependency scanning
+- Non-sensitive container builds
+
+**🔴 Use Self-hosted Runners for:**
+- Production deployments
+- Regulatory compliance checks
+- Financial data processing
+- Audit trail generation
+- Environment-specific deployments
+- Network-restricted operations
+- Sensitive secret handling
+- Long-term audit log retention
+
+## Configuration Examples
+
+### Hybrid Workflow Configuration
+
+Our workflows support both runner types through conditional logic:
+
+```yaml
+env:
+  # Default to GitHub hosted for development efficiency and cost optimization
+  USE_GITHUB_HOSTED: ${{ github.event.inputs.runner_type == 'github-hosted' || (github.event.inputs.runner_type == '' && github.ref != 'refs/heads/main') }}
+  # Force self-hosted for production and sensitive operations
+  FORCE_SELF_HOSTED: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[production]') }}
+
+jobs:
+  build-and-test:
+    name: '🔨 Build & Test'
+    # Conditional runner selection
+    runs-on: ${{ env.USE_GITHUB_HOSTED == 'true' && env.FORCE_SELF_HOSTED != 'true' && 'ubuntu-latest' || fromJSON('["self-hosted", "bfsi-build"]') }}
+    
+  # Production deployments always use self-hosted runners
+  deploy-prod:
+    name: '🚀 Deploy to Production'
+    runs-on: [self-hosted, bfsi-deploy-prod]  # Always self-hosted for production security
+```
+
+### Manual Runner Selection
+
+You can manually choose the runner type when triggering workflows:
+
+```yaml
+workflow_dispatch:
+  inputs:
+    runner_type:
+      description: 'Runner type to use'
+      required: false
+      default: 'github-hosted'
+      type: choice
+      options:
+        - 'github-hosted'
+        - 'self-hosted'
+```
+
+## GitHub Hosted Runners Configuration
+
+### Advantages for BFSI Development
+
+1. **Cost Optimization**
+   - No infrastructure maintenance costs
+   - Pay only for actual usage
+   - Ideal for development and testing phases
+
+2. **GitHub Product Integration**
+   - Seamless integration with GitHub Advanced Security
+   - Built-in CodeQL analysis
+   - Native GitHub Packages support
+   - Integrated GitHub Container Registry
+
+3. **Developer Productivity**
+   - Instant availability, no wait times
+   - Always updated with latest tools
+   - Consistent environment across teams
+
+4. **Compliance Benefits**
+   - SOC 2 Type II certified infrastructure
+   - Regular security updates
+   - Built-in security controls
+
+### Recommended GitHub Hosted Workflow
+
+```yaml
+name: 'BFSI Development Pipeline'
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ develop, 'feature/*' ]
+
+jobs:
+  # Use GitHub hosted runners for development workflows
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      # Leverage GitHub's built-in security features
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+      
+      - name: Build for Analysis
+        run: mvn compile
+      
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+      
+      # Use GitHub's dependency scanning
+      - name: Run Dependency Check
+        run: mvn org.owasp:dependency-check-maven:check
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [17, 21]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+      
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+      
+      - name: Run Tests
+        run: mvn test
+      
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-java-${{ matrix.java-version }}
+          path: target/surefire-reports/
+```
+
+### GitHub Actions Security Features
+
+Maximize GitHub's security features when using hosted runners:
+
+```yaml
+permissions:
+  # Minimal permissions for security
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # Advanced Security Features
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # GitHub Advanced Security - Secret Scanning
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+      
+      # GitHub Advanced Security - Dependency Review
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate
+      
+      # Container scanning with GitHub Container Registry
+      - name: Build and scan container
+        run: |
+          docker build -t temp-image .
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $PWD:/app -w /app aquasec/trivy image temp-image
+```
+
+## Self-hosted Runner Configuration
+
+### When Self-hosted Runners are Mandatory
+
+For Indian Financial Institutions, self-hosted runners are **required** for:
+
+1. **Regulatory Compliance Operations**
+   - RBI audit trail generation
+   - SEBI compliance reporting
+   - IRDAI data governance checks
+   - Regulatory filing processes
+
+2. **Production Environments**
+   - Production deployments
+   - Live system monitoring
+   - Production data processing
+   - Critical system updates
+
+3. **Sensitive Data Processing**
+   - Customer PII handling
+   - Financial transaction processing
+   - Credit scoring and risk assessment
+   - Fraud detection algorithms
+
+4. **Network-restricted Operations**
+   - Internal API access
+   - Database connections
+   - Legacy system integrations
+   - On-premises service calls
+
+## Best Practices for Hybrid Runner Usage
+
+### Cost Optimization Strategy
+
+1. **Default to GitHub Hosted Runners**
+   - Use for all development and testing workflows
+   - Leverage for feature branch validation
+   - Utilize for open source dependency scanning
+   - Employ for basic security scanning
+
+2. **Strategic Self-hosted Runner Usage**
+   - Reserve for production deployments only
+   - Use for regulatory compliance checks
+   - Employ for sensitive data processing
+   - Utilize for internal network access
+
+3. **Workflow Design Patterns**
+   ```yaml
+   # Development workflow - GitHub hosted
+   development:
+     if: github.ref != 'refs/heads/main'
+     runs-on: ubuntu-latest
+   
+   # Production workflow - Self-hosted
+   production:
+     if: github.ref == 'refs/heads/main'
+     runs-on: [self-hosted, bfsi-prod]
+   ```
+
+### Security Considerations
+
+1. **GitHub Hosted Runners**
+   - Use minimal permissions principle
+   - Avoid storing sensitive secrets
+   - Use environment-specific configurations
+   - Implement proper secret management
+
+2. **Self-hosted Runners**
+   - Implement network isolation
+   - Regular security updates
+   - Comprehensive audit logging
+   - Access control enforcement
+
+### Migration Strategy
+
+1. **Phase 1: Development Workflows**
+   - Move all feature branch builds to GitHub hosted
+   - Migrate unit and integration tests
+   - Transition code quality checks
+
+2. **Phase 2: Staging Environments**
+   - Evaluate staging deployment on GitHub hosted
+   - Test performance and security implications
+   - Validate integration capabilities
+
+3. **Phase 3: Selective Production**
+   - Keep critical production deployments on self-hosted
+   - Migrate non-sensitive production tasks
+   - Monitor compliance and performance
+
+### Regulatory Considerations for Self-hosted Runners
+
+## Self-hosted Runner Configuration
+
+### When Self-hosted Runners are Mandatory
 
 ### RBI IT Framework Compliance
 - **Data Localization**: Runners must be hosted within Indian territory
