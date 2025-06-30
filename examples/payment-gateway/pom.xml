@@ -25,10 +25,10 @@
         <!-- Security Libraries -->
         <spring-security.version>6.2.0</spring-security.version>
         <bouncycastle.version>1.76</bouncycastle.version>
-        <nimbus-jose-jwt.version>9.37</nimbus-jose-jwt.version>
+        <nimbus-jose-jwt.version>9.37.2</nimbus-jose-jwt.version>
         
         <!-- Database -->
-        <postgresql.version>42.7.1</postgresql.version>
+        <postgresql.version>42.7.2</postgresql.version>
         <hikari.version>5.1.0</hikari.version>
         
         <!-- Logging -->
