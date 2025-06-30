@@ -94,8 +94,12 @@ paths:
   - "modules/*/src/main/java/**"
   - "components/*/src/main/java/**"
   - "services/*/src/main/java/**"
+  - "examples/*/src/main/java/**"
+  - "**/src/main/java/**"
   - "!src/test/**"
   - "!modules/*/src/test/**"
+  - "!examples/*/src/test/**"
+  - "!**/src/test/**"
   - "!**/*Test.java"
   - "!**/*TestCase.java"
 
