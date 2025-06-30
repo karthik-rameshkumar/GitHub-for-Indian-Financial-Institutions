@@ -1,0 +1,65 @@
+# Financial Services Branch Protection Template
+# Designed specifically for financial institutions with regulatory requirements
+
+required_status_checks:
+  strict: true
+  contexts:
+    # Development Quality Gates
+    - "ci/build"
+    - "ci/unit-test"
+    - "ci/integration-test"
+    - "ci/performance-test"
+    
+    # Security Scanning Gates
+    - "security/sast-codeql"
+    - "security/sast-sonarqube"
+    - "security/dependency-scan"
+    - "security/container-scan"
+    - "security/secret-scan"
+    - "security/license-scan"
+    
+    # Compliance Gates
+    - "compliance/rbi-check"
+    - "compliance/irdai-check"
+    - "compliance/pci-dss-check"
+    - "compliance/data-residency"
+    - "compliance/audit-trail"
+    
+    # Quality Gates
+    - "quality/code-coverage"
+    - "quality/code-quality"
+    - "quality/documentation"
+
+enforce_admins: true
+
+required_pull_request_reviews:
+  required_approving_review_count: 3  # Increased for financial services
+  dismiss_stale_reviews: true
+  require_code_owner_reviews: true
+  require_last_push_approval: true
+  dismissal_restrictions:
+    users: []
+    teams:
+      - "security-team"
+      - "compliance-officers"
+      - "risk-management"
+
+restrictions:
+  users: []
+  teams:
+    - "senior-developers"
+    - "tech-leads"
+    - "security-team"
+    - "release-managers"
+  apps:
+    - "github-actions"
+
+allow_force_pushes: false
+allow_deletions: false
+
+required_linear_history: true
+required_conversation_resolution: true
+
+# Additional protections for financial services
+lock_branch: false  # Set to true for production releases
+required_signatures: true  # Require signed commits

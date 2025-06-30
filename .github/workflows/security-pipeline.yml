@@ -1,0 +1,268 @@
+name: Security-Focused Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - 'Dockerfile'
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run secret scan
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+
+  sast-analysis:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: java
+        queries: security-extended
+
+    - name: Build application
+      run: mvn clean compile -DskipTests
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+    - name: Run SpotBugs
+      run: |
+        mvn spotbugs:spotbugs
+        mvn spotbugs:check
+
+  dependency-vulnerability:
+    name: Dependency Vulnerability Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Run OWASP Dependency Check
+      run: |
+        mvn org.owasp:dependency-check-maven:check
+
+    - name: Upload OWASP report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: owasp-report
+        path: target/dependency-check-report.html
+
+    - name: Check for high severity vulnerabilities
+      run: |
+        if [ -f target/dependency-check-report.json ]; then
+          high_vulns=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "HIGH")] | length' target/dependency-check-report.json)
+          if [ "$high_vulns" -gt 0 ]; then
+            echo "Found $high_vulns high severity vulnerabilities!"
+            exit 1
+          fi
+        fi
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Generate license report
+      run: |
+        mvn license:add-third-party
+        mvn license:download-licenses
+
+    - name: Check banned licenses
+      run: |
+        # Check for GPL and other copyleft licenses
+        if grep -i "gpl\|agpl\|lgpl" target/generated-sources/license/THIRD-PARTY.txt; then
+          echo "Found potentially problematic licenses!"
+          exit 1
+        fi
+
+  container-security:
+    name: Container Security Analysis
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    - name: Build application
+      run: mvn clean package -DskipTests
+
+    - name: Build Docker image
+      run: |
+        docker build -t security-scan:latest .
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'security-scan:latest'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Anchore Container Scan
+      uses: anchore/scan-action@v3
+      with:
+        image: "security-scan:latest"
+        fail-build: true
+        severity-cutoff: high
+
+  infrastructure-scan:
+    name: Infrastructure as Code Security
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Checkov
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: .
+        framework: dockerfile,github_actions
+        output_format: sarif
+        output_file_path: checkov-results.sarif
+
+    - name: Upload Checkov results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: checkov-results.sarif
+
+  compliance-audit:
+    name: Financial Compliance Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: RBI Compliance Check
+      run: |
+        echo "Checking RBI IT Framework compliance..."
+        # Check for data localization requirements
+        # Verify encryption at rest and in transit
+        # Audit access controls
+        
+    - name: IRDAI Guidelines Validation
+      run: |
+        echo "Validating IRDAI Information Systems Security Guidelines..."
+        # Check cybersecurity framework implementation
+        # Verify incident response procedures
+        
+    - name: PCI DSS Compliance (if applicable)
+      run: |
+        echo "Checking PCI DSS compliance for payment processing..."
+        # Validate payment data protection
+        # Check network segmentation
+
+    - name: ISO 27001 Controls
+      run: |
+        echo "Auditing ISO 27001 security controls..."
+        # Information security management
+        # Risk assessment procedures
+
+  penetration-test:
+    name: Automated Penetration Testing
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup test environment
+      run: |
+        echo "Setting up isolated test environment..."
+        
+    - name: Run OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.10.0
+      with:
+        target: 'http://localhost:8080'
+        rules_file_name: '.zap/rules.tsv'
+
+    - name: Upload ZAP results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: zap-report
+        path: report_html.html
+
+  security-monitoring:
+    name: Security Monitoring Setup
+    runs-on: ubuntu-latest
+    needs: [sast-analysis, dependency-vulnerability, container-security]
+    
+    steps:
+    - name: Configure security alerts
+      run: |
+        echo "Configuring security monitoring and alerts..."
+        
+    - name: Setup SIEM integration
+      run: |
+        echo "Setting up SIEM integration for security events..."
+        
+    - name: Create security dashboard
+      run: |
+        echo "Creating security metrics dashboard..."

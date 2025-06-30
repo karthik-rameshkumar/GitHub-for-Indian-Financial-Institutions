@@ -1,0 +1,523 @@
+name: ML Model Training Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly retraining on Sundays at 2 AM
+  workflow_dispatch:
+    inputs:
+      retrain_type:
+        description: 'Type of retraining'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+      model_version:
+        description: 'Model version to deploy'
+        required: false
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+  MODEL_REGISTRY_URI: ${{ secrets.MODEL_REGISTRY_URI }}
+
+jobs:
+  data-validation:
+    name: Validate Training Data
+    runs-on: ubuntu-latest
+    outputs:
+      data_quality_score: ${{ steps.quality.outputs.score }}
+      drift_detected: ${{ steps.drift.outputs.detected }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download latest data
+      run: |
+        python scripts/download_training_data.py
+      env:
+        DATABASE_URL: ${{ secrets.TRAINING_DATABASE_URL }}
+        DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
+
+    - name: Validate data quality
+      id: quality
+      run: |
+        score=$(python scripts/validate_data_quality.py)
+        echo "score=$score" >> $GITHUB_OUTPUT
+        if [ $(echo "$score < 0.8" | bc) -eq 1 ]; then
+          echo "Data quality score $score is below threshold"
+          exit 1
+        fi
+
+    - name: Check for data drift
+      id: drift
+      run: |
+        drift=$(python scripts/detect_data_drift.py)
+        echo "detected=$drift" >> $GITHUB_OUTPUT
+        if [ "$drift" = "true" ]; then
+          echo "Significant data drift detected"
+        fi
+
+    - name: Generate data profiling report
+      run: |
+        python scripts/generate_data_profile.py
+
+    - name: Upload data artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: data-artifacts
+        path: |
+          data/processed/
+          reports/data_profile.html
+
+  feature-engineering:
+    name: Feature Engineering
+    runs-on: ubuntu-latest
+    needs: data-validation
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download data artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: data-artifacts
+        path: data/
+
+    - name: Extract features
+      run: |
+        python scripts/feature_engineering.py \
+          --input data/processed/training_data.csv \
+          --output data/features/
+
+    - name: Validate features
+      run: |
+        python scripts/validate_features.py
+
+    - name: Upload feature artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: feature-artifacts
+        path: data/features/
+
+  model-training:
+    name: Train ML Model
+    runs-on: ubuntu-latest
+    needs: [data-validation, feature-engineering]
+    environment: ml-training
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download feature artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: feature-artifacts
+        path: data/features/
+
+    - name: Configure MLflow
+      run: |
+        mlflow server --host 0.0.0.0 --port 5000 &
+        sleep 10
+
+    - name: Train model
+      run: |
+        python scripts/train_model.py \
+          --experiment-name "credit_scoring_${{ github.run_id }}" \
+          --retrain-type "${{ github.event.inputs.retrain_type || 'incremental' }}" \
+          --features-path data/features/
+      env:
+        MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
+
+    - name: Evaluate model performance
+      run: |
+        python scripts/evaluate_model.py \
+          --model-run-id $(cat models/latest_run_id.txt)
+
+    - name: Generate model explanation
+      run: |
+        python scripts/generate_explanations.py \
+          --model-path models/latest_model.pkl
+
+    - name: Upload model artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: model-artifacts
+        path: |
+          models/
+          reports/model_evaluation.html
+          reports/feature_importance.json
+
+  model-validation:
+    name: Validate Model Quality
+    runs-on: ubuntu-latest
+    needs: model-training
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+
+    - name: Run model unit tests
+      run: |
+        python -m pytest tests/model_tests.py -v --cov=src/models
+
+    - name: Performance benchmarking
+      run: |
+        python scripts/benchmark_model.py \
+          --model-path models/latest_model.pkl \
+          --benchmark-data data/benchmark.csv
+
+    - name: Bias and fairness testing
+      run: |
+        python scripts/test_model_fairness.py \
+          --model-path models/latest_model.pkl \
+          --test-data data/fairness_test.csv
+
+    - name: Model robustness testing
+      run: |
+        python scripts/test_model_robustness.py
+
+    - name: Generate model validation report
+      run: |
+        python scripts/generate_validation_report.py
+
+  compliance-review:
+    name: Regulatory Compliance Review
+    runs-on: ubuntu-latest
+    needs: model-validation
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+
+    - name: Explainability validation
+      run: |
+        python scripts/validate_explainability.py \
+          --model-path models/latest_model.pkl \
+          --min-explainability-score 0.7
+
+    - name: RBI compliance check
+      run: |
+        python scripts/rbi_compliance_check.py \
+          --model-path models/latest_model.pkl
+
+    - name: IRDAI guidelines validation
+      run: |
+        python scripts/irdai_compliance_check.py
+
+    - name: Generate model card
+      run: |
+        python scripts/generate_model_card.py \
+          --model-path models/latest_model.pkl \
+          --output models/model_card.json
+
+    - name: Model documentation generation
+      run: |
+        python scripts/generate_model_docs.py \
+          --model-path models/latest_model.pkl \
+          --output docs/model_documentation.md
+
+    - name: Upload compliance artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: compliance-artifacts
+        path: |
+          models/model_card.json
+          docs/model_documentation.md
+          reports/compliance_report.html
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: model-training
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+
+    - name: Scan for hardcoded secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+
+    - name: Dependency vulnerability scan
+      run: |
+        pip install safety
+        safety check --json --output safety_report.json
+
+    - name: Model poisoning detection
+      run: |
+        python scripts/detect_model_poisoning.py \
+          --model-path models/latest_model.pkl
+
+    - name: PII detection in model
+      run: |
+        python scripts/detect_pii_in_model.py \
+          --model-path models/latest_model.pkl
+
+  a-b-testing-setup:
+    name: A/B Testing Configuration
+    runs-on: ubuntu-latest
+    needs: [model-validation, compliance-review]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: models/
+
+    - name: Configure A/B test
+      run: |
+        python scripts/setup_ab_test.py \
+          --champion-model production_model_v1.0 \
+          --challenger-model models/latest_model.pkl \
+          --traffic-split 0.1
+
+    - name: Deploy to staging
+      run: |
+        python scripts/deploy_to_staging.py \
+          --model-path models/latest_model.pkl
+
+    - name: Run staging validation
+      run: |
+        python scripts/validate_staging_deployment.py
+
+  model-registration:
+    name: Register Model in MLflow
+    runs-on: ubuntu-latest
+    needs: [compliance-review, security-scan, a-b-testing-setup]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Register model in MLflow
+      run: |
+        python scripts/register_model.py \
+          --model-path model-artifacts/latest_model.pkl \
+          --model-name "CreditScoringModel" \
+          --stage "Staging" \
+          --model-card compliance-artifacts/model_card.json
+      env:
+        MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
+
+    - name: Create model version
+      run: |
+        python scripts/create_model_version.py \
+          --model-name "CreditScoringModel" \
+          --version "${{ github.event.inputs.model_version || github.run_number }}"
+
+  production-deployment:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: model-registration
+    environment: production
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure Kubernetes
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+
+    - name: Update model serving deployment
+      run: |
+        envsubst < k8s/model-serving-template.yml > k8s/model-serving.yml
+        kubectl apply -f k8s/model-serving.yml
+      env:
+        MODEL_VERSION: ${{ github.event.inputs.model_version || github.run_number }}
+        MODEL_URI: ${{ env.MODEL_REGISTRY_URI }}/CreditScoringModel/${{ github.event.inputs.model_version || github.run_number }}
+
+    - name: Wait for deployment
+      run: |
+        kubectl rollout status deployment/credit-scoring-model
+
+    - name: Run production smoke tests
+      run: |
+        python scripts/production_smoke_tests.py
+
+    - name: Enable traffic routing
+      run: |
+        python scripts/enable_traffic_routing.py \
+          --model-version "${{ github.event.inputs.model_version || github.run_number }}"
+
+  monitoring-setup:
+    name: Setup Model Monitoring
+    runs-on: ubuntu-latest
+    needs: production-deployment
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure monitoring dashboards
+      run: |
+        python scripts/setup_monitoring.py \
+          --model-name "CreditScoringModel" \
+          --version "${{ github.event.inputs.model_version || github.run_number }}"
+
+    - name: Setup alerting rules
+      run: |
+        python scripts/setup_alerts.py \
+          --model-name "CreditScoringModel"
+
+    - name: Initialize data drift monitoring
+      run: |
+        python scripts/setup_drift_monitoring.py
+
+  notification:
+    name: Send Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [production-deployment, monitoring-setup]
+    if: always()
+    
+    steps:
+    - name: Send success notification
+      if: needs.production-deployment.result == 'success'
+      run: |
+        curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          -H 'Content-type: application/json' \
+          --data '{
+            "text": "✅ Credit Scoring Model v${{ github.event.inputs.model_version || github.run_number }} deployed successfully",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Model Deployment Successful* 🎉\n\n*Model:* CreditScoringModel\n*Version:* ${{ github.event.inputs.model_version || github.run_number }}\n*Deployment:* Production\n*A/B Test:* 10% traffic"
+                }
+              }
+            ]
+          }'
+
+    - name: Send failure notification
+      if: needs.production-deployment.result == 'failure'
+      run: |
+        curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+          -H 'Content-type: application/json' \
+          --data '{
+            "text": "❌ Credit Scoring Model deployment failed",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Model Deployment Failed* ⚠️\n\n*Model:* CreditScoringModel\n*Version:* ${{ github.event.inputs.model_version || github.run_number }}\n*Stage:* Production\n*Action:* Please review deployment logs"
+                }
+              }
+            ]
+          }'
