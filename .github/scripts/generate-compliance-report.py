@@ -27,7 +27,7 @@ class ComplianceReportGenerator:
         self.standards = standards
         self.report = {
             "metadata": {
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now().isoformat(),
                 "version": "1.0.0",
                 "standards": standards
             },

@@ -25,7 +25,7 @@ class SecurityMetricsExtractor:
     
     def __init__(self):
         self.metrics = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "total_results": 0,
             "severity_breakdown": {
                 "critical": 0,
