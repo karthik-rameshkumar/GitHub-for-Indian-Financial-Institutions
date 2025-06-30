@@ -1,0 +1,257 @@
+# Application Configuration for Docker Environment
+# NBFC Core Application - RBI Compliant Configuration
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+# Management and Monitoring
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    os:
+      enabled: true
+
+# Spring Configuration
+spring:
+  application:
+    name: nbfc-core
+  profiles:
+    active: docker
+    
+  # Database Configuration (will be overridden by secrets)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nbfc_core
+    username: ${DB_USERNAME:nbfc_user}
+    password: ${DB_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 20000
+      validation-timeout: 5000
+      leak-detection-threshold: 60000
+      
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.SnakeCasePhysicalNamingStrategy
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        show_sql: false
+        use_sql_comments: false
+        jdbc:
+          batch_size: 25
+          order_inserts: true
+          order_updates: true
+        cache:
+          use_second_level_cache: false
+          
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    locations: classpath:db/migration
+    
+  # Security Configuration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080}
+          
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-single-value-as-array: true
+    time-zone: Asia/Kolkata
+    
+  # Session Configuration
+  session:
+    store-type: jdbc
+    timeout: 1800s
+    jdbc:
+      initialize-schema: always
+      table-name: SPRING_SESSION
+
+# Logging Configuration
+logging:
+  level:
+    com.bfsi.nbfc: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    org.flywaydb: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+  file:
+    path: /app/logs
+    name: /app/logs/nbfc-core.log
+    max-size: 100MB
+    max-history: 30
+
+# Application Specific Configuration
+nbfc:
+  core:
+    # API Configuration
+    api:
+      version: "1.0.0"
+      title: "NBFC Core API"
+      description: "Core banking system API for NBFC operations"
+      contact:
+        name: "BFSI Technical Team"
+        email: "tech@bfsi-org.com"
+        
+    # Security Configuration
+    security:
+      jwt:
+        secret: ${JWT_SECRET:default-secret-key-change-in-production}
+        expiration: 3600000  # 1 hour
+        refresh-expiration: 86400000  # 24 hours
+      password:
+        min-length: 8
+        max-length: 128
+        require-uppercase: true
+        require-lowercase: true
+        require-digit: true
+        require-special: true
+        
+    # RBI Compliance Settings
+    compliance:
+      rbi:
+        data-localization: true
+        audit-trail: true
+        encryption-required: true
+        session-timeout: 1800  # 30 minutes
+        password-policy-strict: true
+        
+    # Audit Configuration
+    audit:
+      enabled: true
+      log-path: /app/audit
+      retention-days: 2555  # 7 years as per RBI requirements
+      events:
+        - LOGIN
+        - LOGOUT
+        - TRANSACTION
+        - ADMIN_ACTION
+        - DATA_ACCESS
+        - CONFIGURATION_CHANGE
+        
+    # Credit Processing
+    credit:
+      bureau-integration:
+        timeout: 30000
+        retry-attempts: 3
+        circuit-breaker-enabled: true
+      risk-engine:
+        enabled: true
+        model-version: "v2.1"
+        score-range: "300-850"
+        
+    # External API Configuration
+    external:
+      apis:
+        cibil:
+          base-url: ${CIBIL_API_URL:https://api.cibil.com/v2}
+          timeout: 30000
+          retry-attempts: 3
+        equifax:
+          base-url: ${EQUIFAX_API_URL:https://api.equifax.com/v1}
+          timeout: 30000
+          retry-attempts: 3
+          
+    # Regulatory Reporting
+    regulatory:
+      rbi:
+        reporting-enabled: true
+        endpoint: ${RBI_REPORTING_URL:https://rbi-reporting.internal}
+        batch-size: 1000
+        schedule: "0 0 2 * * ?"  # Daily at 2 AM
+      sebi:
+        reporting-enabled: false
+        
+# Resilience4j Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      credit-bureau:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 10s
+        slow-call-rate-threshold: 50
+        
+  retry:
+    instances:
+      credit-bureau:
+        max-attempts: 3
+        wait-duration: 2s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        
+  timelimiter:
+    instances:
+      credit-bureau:
+        timeout-duration: 30s
+        cancel-running-future: true
+
+# OpenAPI/Swagger Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    config-url: /api-docs/swagger-config
+    urls-primary-name: NBFC Core API
+  show-actuator: false
+  group-configs:
+    - group: nbfc-core
+      paths-to-match: /api/v1/**
+      packages-to-scan: com.bfsi.nbfc.controller
