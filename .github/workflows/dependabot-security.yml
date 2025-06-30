@@ -1,0 +1,268 @@
+# Dependabot Security Management for BFSI Applications
+name: "Dependabot Security Management"
+
+on:
+  pull_request:
+    branches: [ "main", "develop" ]
+    paths:
+      - "pom.xml"
+      - "package.json"
+      - "Dockerfile"
+      - ".github/dependabot.yml"
+  
+  # Manual trigger for security reviews
+  workflow_dispatch:
+    inputs:
+      severity_threshold:
+        description: 'Minimum severity to process (low, medium, high, critical)'
+        required: true
+        default: 'medium'
+        type: choice
+        options:
+          - low
+          - medium
+          - high
+          - critical
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: '-Xmx2g'
+
+jobs:
+  # Analyze Dependabot PRs for financial compliance
+  dependabot-security-review:
+    name: "Dependabot Security Review"
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+
+    # Extract dependency information from Dependabot PR
+    - name: Extract dependency info
+      id: extract-deps
+      run: |
+        echo "Extracting dependency information from Dependabot PR..."
+        
+        # Get PR title and body
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        PR_BODY="${{ github.event.pull_request.body }}"
+        
+        # Extract package name and versions
+        if [[ "$PR_TITLE" =~ Bump\ ([^\ ]+)\ from\ ([^\ ]+)\ to\ ([^\ ]+) ]]; then
+          PACKAGE_NAME="${BASH_REMATCH[1]}"
+          OLD_VERSION="${BASH_REMATCH[2]}"
+          NEW_VERSION="${BASH_REMATCH[3]}"
+          
+          echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "old_version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          echo "Package: $PACKAGE_NAME"
+          echo "Old Version: $OLD_VERSION"
+          echo "New Version: $NEW_VERSION"
+        fi
+
+    # Check for known vulnerabilities in the dependency
+    - name: CVE Security Assessment
+      id: cve-check
+      run: |
+        echo "Checking for CVEs in dependency update..."
+        
+        PACKAGE_NAME="${{ steps.extract-deps.outputs.package_name }}"
+        OLD_VERSION="${{ steps.extract-deps.outputs.old_version }}"
+        NEW_VERSION="${{ steps.extract-deps.outputs.new_version }}"
+        
+        # Create CVE report
+        mkdir -p security-reports
+        
+        # Use OWASP Dependency Check for vulnerability scanning
+        mvn org.owasp:dependency-check-maven:check \
+          -DskipSystemScope=true \
+          -DfailBuildOnCVSS=0 \
+          -Dformat=JSON,HTML \
+          -DprettyPrint=true
+        
+        # Parse CVE results
+        if [ -f "target/dependency-check-report.json" ]; then
+          python3 .github/scripts/parse-cve-report.py \
+            --input target/dependency-check-report.json \
+            --package "$PACKAGE_NAME" \
+            --old-version "$OLD_VERSION" \
+            --new-version "$NEW_VERSION" \
+            --output security-reports/cve-analysis.json
+        fi
+
+    # BFSI compliance check for dependencies
+    - name: BFSI Compliance Check
+      id: compliance-check
+      run: |
+        echo "Checking BFSI compliance for dependency update..."
+        
+        PACKAGE_NAME="${{ steps.extract-deps.outputs.package_name }}"
+        
+        # Check against approved dependency list for financial institutions
+        python3 .github/scripts/bfsi-dependency-compliance.py \
+          --package "$PACKAGE_NAME" \
+          --approved-list .github/security/approved-dependencies.json \
+          --output security-reports/compliance-check.json
+
+    # License compliance verification
+    - name: License Compliance Check
+      run: |
+        echo "Verifying license compliance..."
+        
+        # Generate license report
+        mvn license:add-third-party \
+          -Dlicense.outputDirectory=security-reports \
+          -Dlicense.thirdPartyFilename=THIRD-PARTY-LICENSES.txt
+        
+        # Check for prohibited licenses
+        python3 .github/scripts/license-compliance.py \
+          --licenses security-reports/THIRD-PARTY-LICENSES.txt \
+          --prohibited-licenses .github/security/prohibited-licenses.json \
+          --output security-reports/license-compliance.json
+
+    # Generate security impact assessment
+    - name: Security Impact Assessment
+      run: |
+        echo "Generating security impact assessment..."
+        
+        python3 .github/scripts/security-impact-assessment.py \
+          --cve-report security-reports/cve-analysis.json \
+          --compliance-report security-reports/compliance-check.json \
+          --license-report security-reports/license-compliance.json \
+          --output security-reports/impact-assessment.json
+
+    # Create detailed PR comment with security analysis
+    - name: Post Security Analysis
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read security reports
+          let cveReport = {};
+          let complianceReport = {};
+          let impactAssessment = {};
+          
+          try {
+            if (fs.existsSync('security-reports/cve-analysis.json')) {
+              cveReport = JSON.parse(fs.readFileSync('security-reports/cve-analysis.json', 'utf8'));
+            }
+            if (fs.existsSync('security-reports/compliance-check.json')) {
+              complianceReport = JSON.parse(fs.readFileSync('security-reports/compliance-check.json', 'utf8'));
+            }
+            if (fs.existsSync('security-reports/impact-assessment.json')) {
+              impactAssessment = JSON.parse(fs.readFileSync('security-reports/impact-assessment.json', 'utf8'));
+            }
+          } catch (error) {
+            console.log('Error reading security reports:', error);
+          }
+          
+          // Create security analysis comment
+          const comment = `## 🔒 Security Analysis for Dependabot Update
+          
+          ### 📊 CVE Analysis
+          ${cveReport.vulnerabilities ? 
+            `- **Critical**: ${cveReport.vulnerabilities.critical || 0}
+            - **High**: ${cveReport.vulnerabilities.high || 0}
+            - **Medium**: ${cveReport.vulnerabilities.medium || 0}
+            - **Low**: ${cveReport.vulnerabilities.low || 0}` 
+            : 'No CVE data available'}
+          
+          ### 🏛️ BFSI Compliance
+          ${complianceReport.approved ? '✅ Approved for financial institutions' : '❌ Requires security team review'}
+          ${complianceReport.notes ? `\n**Notes**: ${complianceReport.notes}` : ''}
+          
+          ### 📜 License Compliance
+          ${complianceReport.license_compliant ? '✅ License approved' : '❌ License requires review'}
+          
+          ### 🎯 Risk Assessment
+          **Overall Risk**: ${impactAssessment.risk_level || 'Unknown'}
+          ${impactAssessment.recommendations ? 
+            `\n**Recommendations**:\n${impactAssessment.recommendations.map(r => `- ${r}`).join('\n')}` 
+            : ''}
+          
+          ### 🔍 Required Actions
+          ${impactAssessment.required_actions ? 
+            impactAssessment.required_actions.map(a => `- [ ] ${a}`).join('\n')
+            : '- [ ] Security team review required'}
+          
+          ---
+          *This analysis was generated automatically for BFSI compliance. For questions, contact the security team.*`;
+          
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    # Upload security artifacts
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dependabot-security-analysis
+        path: |
+          security-reports/
+          target/dependency-check-report.*
+        retention-days: 30
+
+  # Auto-merge low-risk updates
+  auto-merge-safe-updates:
+    name: "Auto-merge Safe Updates"
+    needs: dependabot-security-review
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Download security reports
+      uses: actions/download-artifact@v4
+      with:
+        name: dependabot-security-analysis
+        path: security-reports/
+
+    - name: Evaluate auto-merge eligibility
+      id: auto-merge-check
+      run: |
+        echo "Evaluating auto-merge eligibility..."
+        
+        # Check if it's a patch update with no critical/high CVEs
+        python3 .github/scripts/auto-merge-eligibility.py \
+          --impact-assessment security-reports/impact-assessment.json \
+          --pr-title "${{ github.event.pull_request.title }}" \
+          --output-decision auto-merge-decision.json
+        
+        if [ -f "auto-merge-decision.json" ]; then
+          AUTO_MERGE=$(jq -r '.auto_merge' auto-merge-decision.json)
+          REASON=$(jq -r '.reason' auto-merge-decision.json)
+          
+          echo "auto_merge=$AUTO_MERGE" >> $GITHUB_OUTPUT
+          echo "reason=$REASON" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Auto-merge if safe
+      if: steps.auto-merge-check.outputs.auto_merge == 'true'
+      run: |
+        echo "Auto-merging safe dependency update..."
+        gh pr merge ${{ github.event.pull_request.number }} --squash --auto
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

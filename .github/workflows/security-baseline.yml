@@ -1,0 +1,365 @@
+# Security Baseline Establishment for BFSI Applications
+
+name: "Security Baseline Establishment"
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_type:
+        description: 'Type of baseline to establish'
+        required: true
+        type: choice
+        options:
+          - 'initial'
+          - 'quarterly-review'
+          - 'compliance-audit'
+          - 'post-incident'
+  
+  schedule:
+    # Quarterly baseline review
+    - cron: '0 2 1 */3 *'
+
+env:
+  BASELINE_VERSION: "1.0.0"
+  COMPLIANCE_FRAMEWORKS: "RBI,SEBI,ISO27001,IRDAI"
+
+jobs:
+  establish-security-baseline:
+    name: "Establish Security Baseline"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      security-events: write
+      issues: write
+      
+    outputs:
+      baseline-id: ${{ steps.generate-baseline.outputs.baseline_id }}
+      compliance-status: ${{ steps.compliance-check.outputs.status }}
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install -r .github/scripts/requirements.txt
+
+    - name: Generate baseline ID
+      id: generate-baseline
+      run: |
+        BASELINE_ID="BFSI-BASELINE-$(date +%Y%m%d-%H%M%S)"
+        echo "baseline_id=$BASELINE_ID" >> $GITHUB_OUTPUT
+        echo "Generated baseline ID: $BASELINE_ID"
+
+    # Step 1: Security Assessment
+    - name: Comprehensive Security Scan
+      id: security-scan
+      run: |
+        echo "Running comprehensive security assessment..."
+        mkdir -p security-baseline/{code-analysis,dependency-scan,container-scan,compliance-check}
+        
+        # CodeQL analysis
+        echo "Running CodeQL analysis for baseline..."
+        
+        # OWASP Dependency Check
+        if [ -f "pom.xml" ]; then
+          mvn org.owasp:dependency-check-maven:check \
+            -DskipSystemScope=true \
+            -Dformat=JSON,HTML,SARIF \
+            -DprettyPrint=true \
+            -DoutputDirectory=security-baseline/dependency-scan/
+        fi
+        
+        # Container security scan
+        if [ -f "Dockerfile" ]; then
+          docker build -t baseline-scan:latest .
+          trivy image --format sarif --output security-baseline/container-scan/trivy-results.sarif baseline-scan:latest
+        fi
+        
+        # Infrastructure as Code scan
+        if [ -d ".github/workflows" ]; then
+          checkov -d .github/workflows \
+            --framework github_actions \
+            --output sarif \
+            --output-file security-baseline/compliance-check/checkov-results.sarif
+        fi
+
+    # Step 2: Compliance Assessment
+    - name: BFSI Compliance Assessment
+      id: compliance-check
+      run: |
+        echo "Assessing BFSI compliance requirements..."
+        
+        python3 .github/scripts/compliance-baseline-assessment.py \
+          --frameworks "$COMPLIANCE_FRAMEWORKS" \
+          --scan-results security-baseline/ \
+          --output security-baseline/compliance-assessment.json
+
+    # Step 3: Security Metrics Collection
+    - name: Collect Security Metrics
+      run: |
+        echo "Collecting comprehensive security metrics..."
+        
+        python3 .github/scripts/collect-security-metrics.py \
+          --baseline-id "${{ steps.generate-baseline.outputs.baseline_id }}" \
+          --scan-results security-baseline/ \
+          --output security-baseline/security-metrics.json
+
+    # Step 4: Risk Assessment
+    - name: Risk Assessment and Categorization
+      run: |
+        echo "Performing risk assessment..."
+        
+        python3 .github/scripts/risk-assessment.py \
+          --metrics security-baseline/security-metrics.json \
+          --compliance security-baseline/compliance-assessment.json \
+          --risk-matrix .github/security/risk-matrix.json \
+          --output security-baseline/risk-assessment.json
+
+    # Step 5: Generate Baseline Report
+    - name: Generate Security Baseline Report
+      run: |
+        echo "Generating comprehensive baseline report..."
+        
+        python3 .github/scripts/generate-baseline-report.py \
+          --baseline-id "${{ steps.generate-baseline.outputs.baseline_id }}" \
+          --metrics security-baseline/security-metrics.json \
+          --compliance security-baseline/compliance-assessment.json \
+          --risk-assessment security-baseline/risk-assessment.json \
+          --template .github/templates/baseline-report-template.md \
+          --output security-baseline/baseline-report.md
+
+    # Step 6: Create Security Dashboard
+    - name: Generate Security Dashboard
+      run: |
+        echo "Creating interactive security dashboard..."
+        
+        python3 .github/scripts/generate-dashboard-data.py \
+          --metrics security-baseline/security-metrics.json \
+          --output security-baseline/security-dashboard.html
+
+    # Step 7: Compliance Verification
+    - name: Verify Compliance Standards
+      id: verify-compliance
+      run: |
+        echo "Verifying against compliance standards..."
+        
+        # Check RBI IT Framework compliance
+        RBI_SCORE=$(jq -r '.frameworks.rbi.score' security-baseline/compliance-assessment.json)
+        SEBI_SCORE=$(jq -r '.frameworks.sebi.score' security-baseline/compliance-assessment.json)
+        ISO_SCORE=$(jq -r '.frameworks.iso27001.score' security-baseline/compliance-assessment.json)
+        
+        echo "RBI Compliance Score: $RBI_SCORE%"
+        echo "SEBI Compliance Score: $SEBI_SCORE%"
+        echo "ISO 27001 Score: $ISO_SCORE%"
+        
+        # Determine overall compliance status
+        if [ "$RBI_SCORE" -ge 90 ] && [ "$SEBI_SCORE" -ge 90 ] && [ "$ISO_SCORE" -ge 85 ]; then
+          COMPLIANCE_STATUS="COMPLIANT"
+        elif [ "$RBI_SCORE" -ge 80 ] && [ "$SEBI_SCORE" -ge 80 ] && [ "$ISO_SCORE" -ge 75 ]; then
+          COMPLIANCE_STATUS="PARTIALLY_COMPLIANT"
+        else
+          COMPLIANCE_STATUS="NON_COMPLIANT"
+        fi
+        
+        echo "status=$COMPLIANCE_STATUS" >> $GITHUB_OUTPUT
+        echo "Overall compliance status: $COMPLIANCE_STATUS"
+
+    # Step 8: Security Recommendations
+    - name: Generate Security Recommendations
+      run: |
+        echo "Generating security improvement recommendations..."
+        
+        python3 .github/scripts/generate-recommendations.py \
+          --baseline-id "${{ steps.generate-baseline.outputs.baseline_id }}" \
+          --risk-assessment security-baseline/risk-assessment.json \
+          --compliance security-baseline/compliance-assessment.json \
+          --output security-baseline/security-recommendations.json
+
+    # Step 9: Archive Baseline
+    - name: Archive Security Baseline
+      run: |
+        echo "Archiving security baseline..."
+        
+        # Create baseline archive
+        BASELINE_ID="${{ steps.generate-baseline.outputs.baseline_id }}"
+        ARCHIVE_DIR="security-baselines/$BASELINE_ID"
+        
+        mkdir -p "$ARCHIVE_DIR"
+        cp -r security-baseline/* "$ARCHIVE_DIR/"
+        
+        # Create baseline metadata
+        cat > "$ARCHIVE_DIR/metadata.json" << EOF
+        {
+          "baseline_id": "$BASELINE_ID",
+          "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "baseline_type": "${{ github.event.inputs.baseline_type || 'scheduled' }}",
+          "compliance_status": "${{ steps.verify-compliance.outputs.status }}",
+          "version": "$BASELINE_VERSION",
+          "repository": "${{ github.repository }}",
+          "commit_sha": "${{ github.sha }}",
+          "triggered_by": "${{ github.actor }}",
+          "frameworks_assessed": "$COMPLIANCE_FRAMEWORKS"
+        }
+        EOF
+
+    # Step 10: Update Security Policies
+    - name: Update Security Policies
+      if: steps.verify-compliance.outputs.status == 'NON_COMPLIANT'
+      run: |
+        echo "Updating security policies based on compliance gaps..."
+        
+        python3 .github/scripts/update-security-policies.py \
+          --compliance security-baseline/compliance-assessment.json \
+          --recommendations security-baseline/security-recommendations.json \
+          --policies-dir .github/security/policies \
+          --output security-baseline/policy-updates.json
+
+    # Step 11: Create Compliance Issues
+    - name: Create Compliance Issues
+      if: steps.verify-compliance.outputs.status != 'COMPLIANT'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read recommendations
+          let recommendations = [];
+          try {
+            recommendations = JSON.parse(fs.readFileSync('security-baseline/security-recommendations.json', 'utf8'));
+          } catch (error) {
+            console.log('No recommendations file found');
+            return;
+          }
+          
+          // Create issues for high-priority recommendations
+          for (const rec of recommendations.high_priority || []) {
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Security Baseline] ${rec.title}`,
+              body: `## Security Baseline Issue
+              
+              **Baseline ID**: ${{ steps.generate-baseline.outputs.baseline_id }}
+              **Priority**: ${rec.priority}
+              **Compliance Framework**: ${rec.framework}
+              
+              ### Description
+              ${rec.description}
+              
+              ### Impact
+              ${rec.impact}
+              
+              ### Remediation Steps
+              ${rec.remediation_steps.map(step => `- ${step}`).join('\n')}
+              
+              ### Timeline
+              **Due Date**: ${rec.due_date}
+              **Estimated Effort**: ${rec.estimated_effort}
+              
+              ### Compliance Requirements
+              - Framework: ${rec.framework}
+              - Control: ${rec.control_id}
+              - Requirement: ${rec.requirement}
+              
+              ---
+              *This issue was automatically created by the security baseline process.*`,
+              labels: ['security', 'compliance', 'baseline', rec.priority.toLowerCase()],
+              assignees: rec.assignees || []
+            });
+            
+            console.log(`Created issue #${issue.data.number}: ${rec.title}`);
+          }
+
+    # Step 12: Upload Artifacts
+    - name: Upload Security Baseline Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-baseline-${{ steps.generate-baseline.outputs.baseline_id }}
+        path: |
+          security-baseline/
+          security-baselines/
+        retention-days: 365
+
+    # Step 13: Notify Security Team
+    - name: Notify Security Team
+      if: always()
+      run: |
+        echo "Notifying security team of baseline completion..."
+        
+        COMPLIANCE_STATUS="${{ steps.verify-compliance.outputs.status }}"
+        BASELINE_ID="${{ steps.generate-baseline.outputs.baseline_id }}"
+        
+        # Send notification (implement your notification method)
+        echo "Baseline $BASELINE_ID completed with status: $COMPLIANCE_STATUS"
+        
+        # Example: Send to Slack, Teams, or email
+        # curl -X POST -H 'Content-type: application/json' \
+        #   --data "{\"text\":\"Security baseline $BASELINE_ID completed with status: $COMPLIANCE_STATUS\"}" \
+        #   $SLACK_WEBHOOK_URL
+
+    # Step 14: Generate Executive Summary
+    - name: Generate Executive Summary
+      run: |
+        echo "Generating executive summary for leadership..."
+        
+        python3 .github/scripts/generate-executive-summary.py \
+          --baseline-id "${{ steps.generate-baseline.outputs.baseline_id }}" \
+          --compliance security-baseline/compliance-assessment.json \
+          --risk-assessment security-baseline/risk-assessment.json \
+          --template .github/templates/executive-summary-template.md \
+          --output security-baseline/executive-summary.md
+
+  # Generate comparison with previous baseline
+  baseline-comparison:
+    name: "Compare with Previous Baseline"
+    needs: establish-security-baseline
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download current baseline
+      uses: actions/download-artifact@v4
+      with:
+        name: security-baseline-${{ needs.establish-security-baseline.outputs.baseline-id }}
+        path: current-baseline/
+
+    - name: Find previous baseline
+      id: find-previous
+      run: |
+        # Find the most recent previous baseline
+        PREVIOUS_BASELINE=$(ls -1 security-baselines/ | grep "BFSI-BASELINE-" | sort -r | head -n 2 | tail -n 1)
+        
+        if [ -n "$PREVIOUS_BASELINE" ] && [ -d "security-baselines/$PREVIOUS_BASELINE" ]; then
+          echo "previous_baseline=$PREVIOUS_BASELINE" >> $GITHUB_OUTPUT
+          echo "Found previous baseline: $PREVIOUS_BASELINE"
+        else
+          echo "No previous baseline found"
+        fi
+
+    - name: Generate Baseline Comparison
+      if: steps.find-previous.outputs.previous_baseline != ''
+      run: |
+        echo "Comparing with previous baseline..."
+        
+        python3 .github/scripts/compare-baselines.py \
+          --current current-baseline/security-baseline/ \
+          --previous security-baselines/${{ steps.find-previous.outputs.previous_baseline }}/ \
+          --output current-baseline/baseline-comparison.json
+
+    - name: Upload comparison results
+      if: steps.find-previous.outputs.previous_baseline != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: baseline-comparison-${{ needs.establish-security-baseline.outputs.baseline-id }}
+        path: current-baseline/baseline-comparison.json

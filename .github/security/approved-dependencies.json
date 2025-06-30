@@ -1,0 +1,180 @@
+{
+  "approved_dependencies": {
+    "security_libraries": [
+      {
+        "group_id": "org.springframework.security",
+        "artifact_id": "spring-security-core",
+        "approved_versions": ["5.7.0+", "6.0.0+"],
+        "rationale": "Enterprise-grade security framework with active security patches",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      },
+      {
+        "group_id": "org.bouncycastle",
+        "artifact_id": "bcprov-jdk15on",
+        "approved_versions": ["1.70+"],
+        "rationale": "FIPS 140-2 certified cryptographic provider",
+        "compliance_frameworks": ["RBI", "PCI-DSS"]
+      },
+      {
+        "group_id": "com.nimbusds",
+        "artifact_id": "nimbus-jose-jwt",
+        "approved_versions": ["9.0+"],
+        "rationale": "Secure JWT implementation with regular security updates",
+        "compliance_frameworks": ["RBI", "SEBI"]
+      },
+      {
+        "group_id": "io.jsonwebtoken",
+        "artifact_id": "jjwt-api",
+        "approved_versions": ["0.11.0+"],
+        "rationale": "Secure JWT library with protection against common vulnerabilities",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      }
+    ],
+    "database_libraries": [
+      {
+        "group_id": "org.postgresql",
+        "artifact_id": "postgresql",
+        "approved_versions": ["42.4.0+"],
+        "rationale": "PostgreSQL driver with security patches for SQL injection prevention",
+        "compliance_frameworks": ["RBI", "SEBI"]
+      },
+      {
+        "group_id": "mysql",
+        "artifact_id": "mysql-connector-java",
+        "approved_versions": ["8.0.30+"],
+        "rationale": "MySQL connector with enhanced security features",
+        "compliance_frameworks": ["RBI", "SEBI"]
+      },
+      {
+        "group_id": "com.zaxxer",
+        "artifact_id": "HikariCP",
+        "approved_versions": ["5.0.1+"],
+        "rationale": "High-performance connection pool with security enhancements",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      }
+    ],
+    "logging_libraries": [
+      {
+        "group_id": "ch.qos.logback",
+        "artifact_id": "logback-classic",
+        "approved_versions": ["1.2.12+", "1.4.0+"],
+        "rationale": "Secure logging framework without Log4Shell vulnerabilities",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      },
+      {
+        "group_id": "org.apache.logging.log4j",
+        "artifact_id": "log4j-core",
+        "approved_versions": ["2.17.0+"],
+        "rationale": "Log4j with patches for CVE-2021-44228 and related vulnerabilities",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"],
+        "security_notes": "Must be version 2.17.0 or higher to address Log4Shell"
+      }
+    ],
+    "web_frameworks": [
+      {
+        "group_id": "org.springframework",
+        "artifact_id": "spring-webmvc",
+        "approved_versions": ["5.3.21+", "6.0.0+"],
+        "rationale": "Spring MVC with security patches for CVE-2022-22965 (Spring4Shell)",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      },
+      {
+        "group_id": "org.springframework.boot",
+        "artifact_id": "spring-boot-starter-web",
+        "approved_versions": ["2.7.0+", "3.0.0+"],
+        "rationale": "Spring Boot with comprehensive security updates",
+        "compliance_frameworks": ["RBI", "SEBI", "ISO27001"]
+      }
+    ],
+    "testing_libraries": [
+      {
+        "group_id": "org.junit.jupiter",
+        "artifact_id": "junit-jupiter-api",
+        "approved_versions": ["5.8.0+"],
+        "rationale": "Modern testing framework with security best practices",
+        "compliance_frameworks": ["ISO27001"]
+      }
+    ]
+  },
+  "conditional_approvals": {
+    "jackson_libraries": {
+      "rationale": "Jackson libraries require careful version management due to deserialization vulnerabilities",
+      "requirements": [
+        "Must be version 2.13.3 or higher",
+        "Must configure secure deserialization settings",
+        "Must not allow polymorphic deserialization without validation"
+      ],
+      "approved_with_conditions": [
+        {
+          "group_id": "com.fasterxml.jackson.core",
+          "artifact_id": "jackson-databind",
+          "approved_versions": ["2.13.3+", "2.14.0+"],
+          "conditions": [
+            "Configure ObjectMapper with FAIL_ON_UNKNOWN_PROPERTIES",
+            "Disable default typing for polymorphic deserialization",
+            "Use @JsonTypeInfo with allowlist validation"
+          ]
+        }
+      ]
+    }
+  },
+  "prohibited_dependencies": [
+    {
+      "group_id": "org.apache.struts",
+      "artifact_id": "*",
+      "reason": "Multiple critical vulnerabilities, deprecated for financial applications",
+      "alternative": "Spring MVC or JAX-RS"
+    },
+    {
+      "group_id": "org.apache.logging.log4j",
+      "artifact_id": "log4j-core",
+      "versions": ["2.0", "2.15.0", "2.16.0"],
+      "reason": "Vulnerable to Log4Shell (CVE-2021-44228) and related vulnerabilities",
+      "alternative": "Upgrade to 2.17.0+ or use Logback"
+    },
+    {
+      "group_id": "*",
+      "artifact_id": "*",
+      "versions_regex": ".*-SNAPSHOT",
+      "reason": "Snapshot versions not allowed in production financial applications",
+      "alternative": "Use stable release versions only"
+    }
+  ],
+  "compliance_requirements": {
+    "rbi_it_framework": {
+      "mandatory_security_features": [
+        "Input validation and sanitization",
+        "Strong encryption (AES-256 minimum)",
+        "Secure random number generation", 
+        "Protection against injection attacks",
+        "Session management security"
+      ],
+      "audit_requirements": [
+        "All dependencies must have security scan results",
+        "Critical vulnerabilities must be remediated within 24 hours",
+        "Dependencies must be from trusted sources"
+      ]
+    },
+    "sebi_guidelines": {
+      "system_governance": [
+        "Dependencies must be approved by IT governance committee",
+        "Regular security assessments required",
+        "Change management process must be followed"
+      ]
+    },
+    "iso27001": {
+      "information_security": [
+        "Risk assessment for each dependency",
+        "Security controls implementation",
+        "Regular vulnerability monitoring"
+      ]
+    }
+  },
+  "metadata": {
+    "last_updated": "2024-06-30",
+    "version": "1.0.0",
+    "maintained_by": "Security Architecture Team",
+    "next_review_date": "2024-12-30",
+    "approval_process": "All additions require security team and compliance officer approval"
+  }
+}
