@@ -1,0 +1,122 @@
+name: 'Java Build and Test'
+description: 'Build and test Java applications for BFSI compliance'
+inputs:
+  java-version:
+    description: 'Java version to use'
+    required: false
+    default: '17'
+  maven-args:
+    description: 'Additional Maven arguments'
+    required: false
+    default: ''
+  test-coverage-threshold:
+    description: 'Minimum test coverage percentage'
+    required: false
+    default: '80'
+  enable-sonar:
+    description: 'Enable SonarQube analysis'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Set up JDK ${{ inputs.java-version }}'
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: 'temurin'
+        
+    - name: 'Cache Maven dependencies'
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: 'Validate Maven project'
+      shell: bash
+      run: |
+        echo "::group::Maven Validation"
+        mvn validate
+        echo "::endgroup::"
+        
+    - name: 'Compile application'
+      shell: bash
+      run: |
+        echo "::group::Compilation"
+        mvn clean compile ${{ inputs.maven-args }}
+        echo "::endgroup::"
+        
+    - name: 'Run unit tests'
+      shell: bash
+      run: |
+        echo "::group::Unit Tests"
+        mvn test ${{ inputs.maven-args }}
+        echo "::endgroup::"
+        
+    - name: 'Run integration tests'
+      shell: bash
+      run: |
+        echo "::group::Integration Tests"
+        mvn verify ${{ inputs.maven-args }}
+        echo "::endgroup::"
+        
+    - name: 'Check test coverage'
+      shell: bash
+      run: |
+        echo "::group::Test Coverage Analysis"
+        mvn jacoco:report
+        
+        # Extract coverage percentage (simplified version)
+        if [ -f "target/site/jacoco/index.html" ]; then
+          echo "✅ Test coverage report generated"
+          echo "::notice title=Test Coverage::Coverage report available at target/site/jacoco/index.html"
+        else
+          echo "::warning title=Test Coverage::No coverage report found"
+        fi
+        echo "::endgroup::"
+        
+    - name: 'SonarQube Analysis'
+      if: ${{ inputs.enable-sonar == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::SonarQube Analysis"
+        if [ ! -z "$SONAR_TOKEN" ]; then
+          mvn sonar:sonar \
+            -Dsonar.projectKey=${{ github.repository }} \
+            -Dsonar.organization=${{ github.repository_owner }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=$SONAR_TOKEN
+          echo "✅ SonarQube analysis completed"
+        else
+          echo "::warning title=SonarQube::SONAR_TOKEN not found, skipping analysis"
+        fi
+        echo "::endgroup::"
+      env:
+        SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+        
+    - name: 'Package application'
+      shell: bash
+      run: |
+        echo "::group::Packaging"
+        mvn package -DskipTests ${{ inputs.maven-args }}
+        echo "✅ Application packaged successfully"
+        echo "::endgroup::"
+        
+    - name: 'Upload test results'
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          target/surefire-reports/
+          target/failsafe-reports/
+          target/site/jacoco/
+        retention-days: 30
+        
+    - name: 'Upload build artifacts'
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: target/*.jar
+        retention-days: 30

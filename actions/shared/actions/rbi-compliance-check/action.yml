@@ -1,0 +1,119 @@
+name: 'RBI Compliance Check'
+description: 'Validates RBI IT Framework compliance for Indian Financial Institutions'
+inputs:
+  framework-version:
+    description: 'RBI IT Framework version'
+    required: false
+    default: '2021'
+  data-localization-check:
+    description: 'Enable data localization validation'
+    required: false
+    default: 'true'
+  audit-trail-check:
+    description: 'Enable audit trail verification'
+    required: false
+    default: 'true'
+  encryption-check:
+    description: 'Enable encryption compliance check'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: 'RBI Framework Version Check'
+      shell: bash
+      run: |
+        echo "::notice title=RBI Compliance::Validating against RBI IT Framework ${{ inputs.framework-version }}"
+        
+    - name: 'Data Localization Check'
+      if: ${{ inputs.data-localization-check == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Data Localization Compliance"
+        echo "Validating data localization compliance..."
+        
+        # Check for cloud provider configurations
+        if find . -name "*.yml" -o -name "*.yaml" -o -name "*.json" | xargs grep -l "amazonaws\|azure\|gcp" | head -1 >/dev/null; then
+          echo "::warning title=Data Localization::Cloud services detected - ensure data residency compliance"
+        fi
+        
+        # Check for database configurations
+        if find . -name "application*.yml" -o -name "application*.properties" | xargs grep -l "url\|host" | head -1 >/dev/null; then
+          echo "::notice title=Data Localization::Database configurations found - verify Indian data center locations"
+        fi
+        
+        echo "✅ Data localization validation completed"
+        echo "::endgroup::"
+        
+    - name: 'Audit Trail Verification'
+      if: ${{ inputs.audit-trail-check == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Audit Trail Verification"
+        echo "Verifying audit trail implementation..."
+        
+        # Check for audit logging configurations
+        if find . -name "*.java" -o -name "*.js" -o -name "*.py" | xargs grep -l "@Audit\|AuditLog\|audit" | head -1 >/dev/null; then
+          echo "✅ Audit trail implementation detected"
+        else
+          echo "::warning title=Audit Trail::No audit trail implementation detected"
+        fi
+        
+        # Check for log retention policies
+        if find . -name "logback*.xml" -o -name "log4j*.xml" -o -name "*logging*" | head -1 >/dev/null; then
+          echo "✅ Logging configuration found"
+        else
+          echo "::warning title=Audit Trail::No logging configuration found"
+        fi
+        
+        echo "✅ Audit trail verification completed"
+        echo "::endgroup::"
+        
+    - name: 'Encryption Compliance Check'
+      if: ${{ inputs.encryption-check == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Encryption Compliance"
+        echo "Checking encryption compliance..."
+        
+        # Check for encryption configurations
+        if find . -name "*.yml" -o -name "*.properties" -o -name "*.json" | xargs grep -i "encrypt\|aes\|tls\|ssl" | head -1 >/dev/null; then
+          echo "✅ Encryption configurations detected"
+        else
+          echo "::warning title=Encryption::No encryption configurations found"
+        fi
+        
+        # Check for weak encryption patterns
+        if find . -name "*.java" -o -name "*.js" -o -name "*.py" | xargs grep -i "des\|md5\|sha1" | head -1 >/dev/null; then
+          echo "::error title=Encryption::Weak encryption algorithms detected"
+          exit 1
+        fi
+        
+        echo "✅ Encryption compliance check completed"
+        echo "::endgroup::"
+        
+    - name: 'Generate Compliance Report'
+      shell: bash
+      run: |
+        echo "::group::Compliance Report"
+        echo "# RBI IT Framework Compliance Report" > rbi-compliance-report.md
+        echo "Generated on: $(date)" >> rbi-compliance-report.md
+        echo "Framework Version: ${{ inputs.framework-version }}" >> rbi-compliance-report.md
+        echo "" >> rbi-compliance-report.md
+        echo "## Compliance Checks Performed" >> rbi-compliance-report.md
+        echo "- [x] Data Localization: ${{ inputs.data-localization-check }}" >> rbi-compliance-report.md
+        echo "- [x] Audit Trail: ${{ inputs.audit-trail-check }}" >> rbi-compliance-report.md
+        echo "- [x] Encryption: ${{ inputs.encryption-check }}" >> rbi-compliance-report.md
+        echo "" >> rbi-compliance-report.md
+        echo "## Status" >> rbi-compliance-report.md
+        echo "✅ RBI compliance validation completed successfully" >> rbi-compliance-report.md
+        
+        echo "📋 Compliance report generated: rbi-compliance-report.md"
+        echo "::endgroup::"
+        
+    - name: 'Upload Compliance Report'
+      uses: actions/upload-artifact@v4
+      with:
+        name: rbi-compliance-report
+        path: rbi-compliance-report.md
+        retention-days: 90

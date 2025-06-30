@@ -1,0 +1,62 @@
+# Common Environment Variables for BFSI Applications
+
+# Java Configuration
+JAVA_VERSION: "17"
+MAVEN_OPTS: "-Xmx3072m -XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+
+# Security Configuration
+SECURITY_SCAN_ENABLED: "true"
+VULNERABILITY_THRESHOLD: "high"
+DEPENDENCY_CHECK_ENABLED: "true"
+CONTAINER_SCAN_ENABLED: "true"
+
+# Compliance Configuration
+RBI_COMPLIANCE_ENABLED: "true"
+SEBI_COMPLIANCE_ENABLED: "false"
+IRDAI_COMPLIANCE_ENABLED: "false"
+DATA_LOCALIZATION_CHECK: "true"
+AUDIT_TRAIL_ENABLED: "true"
+ENCRYPTION_CHECK_ENABLED: "true"
+
+# Build Configuration
+BUILD_PARALLEL: "true"
+TEST_PARALLEL: "true"
+SKIP_INTEGRATION_TESTS: "false"
+CODE_COVERAGE_THRESHOLD: "80"
+
+# Registry Configuration
+REGISTRY_URL: "your-private-registry.com"
+REGISTRY_USERNAME: "" # Set via secrets
+REGISTRY_PASSWORD: "" # Set via secrets
+
+# Self-hosted Runner Labels
+RUNNER_LABEL_SECURITY: "bfsi-security"
+RUNNER_LABEL_BUILD: "bfsi-build"
+RUNNER_LABEL_COMPLIANCE: "bfsi-compliance"
+RUNNER_LABEL_DEPLOY: "bfsi-deploy"
+
+# Environment-specific Settings
+DEVELOPMENT_AUTO_DEPLOY: "true"
+UAT_APPROVAL_REQUIRED: "true"
+PRODUCTION_APPROVAL_REQUIRED: "true"
+PRODUCTION_APPROVAL_COUNT: "3"
+
+# Monitoring and Alerting
+ALERT_ON_SECURITY_FAILURES: "true"
+ALERT_ON_COMPLIANCE_FAILURES: "true"
+ALERT_CHANNELS: "security-alerts,compliance-alerts"
+
+# Retention Policies
+ARTIFACT_RETENTION_DAYS: "30"
+LOG_RETENTION_DAYS: "90"
+COMPLIANCE_REPORT_RETENTION_DAYS: "2555" # 7 years
+
+# SonarQube Configuration
+SONAR_ENABLED: "false"
+SONAR_HOST_URL: "https://sonarcloud.io"
+SONAR_ORGANIZATION: "" # Set via repository variable
+
+# Notification Configuration
+SLACK_NOTIFICATIONS: "false"
+EMAIL_NOTIFICATIONS: "true"
+TEAMS_NOTIFICATIONS: "false"

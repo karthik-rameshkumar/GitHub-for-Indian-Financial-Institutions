@@ -1,0 +1,131 @@
+# Security Thresholds Configuration for BFSI Applications
+
+security:
+  # Vulnerability thresholds
+  critical_vulnerabilities: 0        # No critical vulnerabilities allowed
+  high_vulnerabilities: 5           # Maximum 5 high severity vulnerabilities
+  medium_vulnerabilities: 20        # Maximum 20 medium severity vulnerabilities
+  low_vulnerabilities: 50           # Maximum 50 low severity vulnerabilities
+  
+  # Security scan requirements
+  sast_required: true               # Static Application Security Testing required
+  dast_required: true               # Dynamic Application Security Testing required
+  sca_required: true                # Software Composition Analysis required
+  container_scan_required: true    # Container security scanning required
+  secrets_scan_required: true      # Secrets detection required
+
+code_quality:
+  # Code coverage requirements
+  code_coverage: 80                 # Minimum 80% code coverage
+  branch_coverage: 75               # Minimum 75% branch coverage
+  line_coverage: 80                 # Minimum 80% line coverage
+  
+  # Code complexity thresholds
+  complexity_threshold: 10          # Maximum cyclomatic complexity
+  duplicated_lines: 5               # Maximum 5% duplicated lines
+  code_smells: 100                  # Maximum 100 code smells
+  
+  # Technical debt
+  technical_debt_ratio: 5           # Maximum 5% technical debt ratio
+  maintainability_rating: "A"      # Required maintainability rating
+
+dependencies:
+  # Dependency vulnerability thresholds
+  outdated_critical: 0              # No critical vulnerabilities in dependencies
+  outdated_high: 3                  # Maximum 3 high severity dependency vulnerabilities
+  outdated_medium: 10               # Maximum 10 medium severity dependency vulnerabilities
+  
+  # License compliance
+  license_violations: 0             # No license violations allowed
+  allowed_licenses:                 # Approved licenses for BFSI
+    - "MIT"
+    - "Apache-2.0"
+    - "BSD-2-Clause"
+    - "BSD-3-Clause"
+    - "ISC"
+  
+  # Dependency age limits
+  dependency_age_limit_days: 365    # Dependencies older than 1 year flagged
+
+compliance:
+  # RBI IT Framework compliance
+  rbi_compliance_score: 90          # Minimum 90% RBI compliance score
+  data_localization_required: true # Data localization compliance required
+  audit_trail_required: true       # Audit trail implementation required
+  encryption_required: true        # Strong encryption required
+  
+  # SEBI compliance (if applicable)
+  sebi_compliance_score: 85         # Minimum 85% SEBI compliance score
+  system_governance_required: true # System governance required
+  
+  # IRDAI compliance (if applicable)
+  irdai_compliance_score: 85        # Minimum 85% IRDAI compliance score
+  business_continuity_required: true # Business continuity planning required
+  
+  # PCI DSS compliance (for payment processing)
+  pci_compliance_score: 95          # Minimum 95% PCI compliance score
+  payment_data_protection: true    # Payment data protection required
+  
+  # General data protection
+  data_protection_score: 85         # Minimum 85% data protection score
+  gdpr_compliance: false            # GDPR compliance (if applicable)
+  
+performance:
+  # Performance test thresholds
+  response_time_threshold_ms: 2000  # Maximum 2 second response time
+  throughput_threshold_rps: 1000    # Minimum 1000 requests per second
+  cpu_utilization_threshold: 80     # Maximum 80% CPU utilization
+  memory_utilization_threshold: 80  # Maximum 80% memory utilization
+  
+  # Load test requirements
+  load_test_duration_minutes: 30    # Minimum 30 minutes load test
+  load_test_users: 1000             # Minimum 1000 concurrent users
+  error_rate_threshold: 1           # Maximum 1% error rate
+
+infrastructure:
+  # Container security
+  container_scan_required: true     # Container vulnerability scanning required
+  base_image_restrictions: true     # Restrict to approved base images
+  privileged_containers: false     # No privileged containers allowed
+  
+  # Network security
+  network_policies_required: true   # Network policies required
+  ingress_tls_required: true       # TLS required for ingress
+  service_mesh_required: false     # Service mesh requirement
+  
+  # Storage security
+  encryption_at_rest: true         # Encryption at rest required
+  encryption_in_transit: true      # Encryption in transit required
+  backup_encryption: true          # Backup encryption required
+
+monitoring:
+  # Alerting thresholds
+  error_rate_alert_threshold: 5     # Alert if error rate > 5%
+  response_time_alert_threshold: 5000 # Alert if response time > 5 seconds
+  availability_threshold: 99.9      # Minimum 99.9% availability
+  
+  # Compliance monitoring
+  compliance_check_frequency_hours: 24 # Check compliance every 24 hours
+  security_scan_frequency_hours: 168   # Security scan every week
+  
+approval_workflows:
+  # Development environment
+  development_approval_required: false
+  development_auto_deployment: true
+  
+  # UAT environment
+  uat_approval_required: true
+  uat_approvers_required: 2
+  uat_security_review_required: true
+  
+  # Production environment
+  production_approval_required: true
+  production_approvers_required: 3
+  production_security_review_required: true
+  production_compliance_review_required: true
+  production_business_approval_required: true
+  
+  # Emergency deployments
+  emergency_approval_override: true
+  emergency_approvers_required: 2
+  emergency_post_deployment_review: true
