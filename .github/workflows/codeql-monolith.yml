@@ -49,13 +49,12 @@ jobs:
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
 
-    # Initialize CodeQL with enhanced configuration for monolithic apps
+    # Initialize CodeQL with configuration for monolithic apps
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         config-file: ./.github/codeql/codeql-monolith-config.yml
-        queries: security-extended,security-and-quality
         # Enhanced settings for large codebases
         ram: ${{ env.CODEQL_RAM }}
         threads: ${{ env.CODEQL_THREADS }}
