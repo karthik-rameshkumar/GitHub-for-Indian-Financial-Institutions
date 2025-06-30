@@ -1,0 +1,187 @@
+# Dependabot configuration for Indian Financial Institutions
+# Ensures security updates and vulnerability management for BFSI applications
+
+version: 2
+updates:
+  # Java Maven dependencies - Critical for financial applications
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+      timezone: "Asia/Kolkata"
+    # Security-first configuration for financial services
+    open-pull-requests-limit: 20
+    target-branch: "develop"
+    reviewers:
+      - "security-team"
+      - "compliance-team"
+    assignees:
+      - "lead-developer"
+      - "security-architect"
+    
+    # Prioritize security updates
+    labels:
+      - "security"
+      - "dependabot"
+      - "financial-compliance"
+    
+    # BFSI-specific versioning strategy
+    versioning-strategy: "increase-if-necessary"
+    
+    # Dependency groups for coordinated updates
+    groups:
+      # Spring Framework ecosystem
+      spring:
+        patterns:
+          - "org.springframework*"
+          - "org.springframework.boot*"
+          - "org.springframework.security*"
+          - "org.springframework.data*"
+        update-types:
+          - "minor"
+          - "patch"
+          - "security"
+      
+      # Security libraries - highest priority
+      security:
+        patterns:
+          - "org.owasp*"
+          - "com.nimbusds*"
+          - "org.bouncycastle*"
+          - "org.apache.shiro*"
+          - "io.jsonwebtoken*"
+        update-types:
+          - "security"
+          - "patch"
+          - "minor"
+      
+      # Database and persistence
+      database:
+        patterns:
+          - "org.hibernate*"
+          - "mysql*"
+          - "org.postgresql*"
+          - "com.zaxxer*"
+          - "org.apache.commons.dbcp*"
+        update-types:
+          - "patch"
+          - "security"
+      
+      # Logging and monitoring
+      observability:
+        patterns:
+          - "ch.qos.logback*"
+          - "org.slf4j*"
+          - "io.micrometer*"
+          - "org.apache.logging.log4j*"
+        update-types:
+          - "patch"
+          - "security"
+    
+    # Only allow updates from trusted registries
+    registries:
+      - "maven-central"
+      - "spring-releases"
+    
+    # Ignore patterns for libraries with known issues
+    ignore:
+      # Ignore alpha/beta versions for financial applications
+      - dependency-name: "*"
+        versions: ["< 1.0.0", "> 0.0.0-alpha", "> 0.0.0-beta", "> 0.0.0-rc"]
+      
+      # Ignore specific vulnerable packages until patches available
+      - dependency-name: "log4j-core"
+        versions: ["2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "2.8", "2.9", "2.10", "2.11", "2.12", "2.13", "2.14", "2.15", "2.16"]
+      
+      # Ignore major version updates for critical dependencies (require manual review)
+      - dependency-name: "org.springframework*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.boot*"
+        update-types: ["version-update:semver-major"]
+
+  # Docker dependencies for containerized applications
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Kolkata"
+    reviewers:
+      - "devops-team"
+      - "security-team"
+    labels:
+      - "docker"
+      - "security"
+      - "infrastructure"
+
+  # NPM dependencies for frontend components
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 15
+    reviewers:
+      - "frontend-team"
+      - "security-team"
+    labels:
+      - "frontend"
+      - "npm"
+      - "security"
+    
+    groups:
+      # Frontend security libraries
+      frontend-security:
+        patterns:
+          - "@angular/security*"
+          - "helmet*"
+          - "express-rate-limit*"
+          - "cors*"
+        update-types:
+          - "security"
+          - "patch"
+    
+    ignore:
+      # Ignore major framework updates for stability
+      - dependency-name: "@angular/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "02:00"
+      timezone: "Asia/Kolkata"
+    reviewers:
+      - "devops-team"
+    labels:
+      - "github-actions"
+      - "ci-cd"
+    
+    groups:
+      # Security-related actions
+      security-actions:
+        patterns:
+          - "github/codeql-action*"
+          - "aquasecurity/trivy-action*"
+          - "anchore/scan-action*"
+        update-types:
+          - "minor"
+          - "patch"
+
+# Registry configuration for trusted sources
+registries:
+  maven-central:
+    type: maven-repository
+    url: https://repo1.maven.org/maven2
+    
+  spring-releases:
+    type: maven-repository
+    url: https://repo.spring.io/release

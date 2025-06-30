@@ -1,0 +1,165 @@
+name: "BFSI Monolithic Application CodeQL Configuration"
+disable-default-queries: false
+
+# Enhanced query configuration for monolithic Java applications
+queries:
+  - name: "BFSI Security Extended"
+    uses: security-extended
+    include:
+      # Core security queries for financial applications
+      - java/sql-injection
+      - java/unsafe-deserialization
+      - java/sensitive-data-exposure
+      - java/weak-cryptographic-algorithm
+      - java/hardcoded-credentials
+      - java/path-traversal
+      - java/xss
+      - java/command-injection
+      - java/zip-slip
+      - java/unsafe-reflection
+      - java/insecure-randomness
+      - java/weak-password-hashing
+      - java/improper-validation-of-array-index
+      - java/missing-jwt-signature-check
+      - java/android-external-file-access
+      - java/sensitive-log-data
+
+  - name: "Financial Services Security"
+    uses: ./codeql-queries/financial/
+    include:
+      # Payment processing security
+      - financial/payment-data-exposure
+      - financial/insecure-payment-validation
+      - financial/weak-transaction-encryption
+      - financial/payment-replay-attack
+      - financial/insufficient-payment-logging
+      
+      # Banking specific vulnerabilities
+      - banking/weak-password-policy
+      - banking/insecure-random-generation
+      - banking/improper-certificate-validation
+      - banking/sensitive-info-in-logs
+      - banking/insufficient-session-expiration
+      - banking/account-enumeration
+      - banking/transaction-tampering
+      - banking/insufficient-rate-limiting
+
+  - name: "PII and Data Protection"
+    uses: ./codeql-queries/privacy/
+    include:
+      # Personal data protection
+      - privacy/pii-exposure
+      - privacy/financial-data-logging
+      - privacy/insecure-data-transmission
+      - privacy/weak-data-encryption
+      - privacy/unencrypted-personal-data
+      - privacy/data-leakage-through-error
+      - privacy/insufficient-data-anonymization
+      - privacy/cross-border-data-transfer
+
+  - name: "Regulatory Compliance"
+    uses: ./codeql-queries/compliance/
+    include:
+      # RBI IT Framework compliance
+      - compliance/rbi-data-localization
+      - compliance/rbi-audit-trail
+      - compliance/rbi-access-control
+      - compliance/rbi-encryption-standards
+      
+      # SEBI compliance
+      - compliance/sebi-system-governance
+      - compliance/sebi-risk-management
+      - compliance/sebi-data-integrity
+      
+      # ISO 27001 controls
+      - compliance/iso27001-access-control
+      - compliance/iso27001-cryptography
+      - compliance/iso27001-incident-management
+
+  - name: "Authentication and Authorization"
+    uses: ./codeql-queries/auth/
+    include:
+      - auth/weak-authentication
+      - auth/broken-authorization
+      - auth/session-fixation
+      - auth/privilege-escalation
+      - auth/insecure-password-storage
+      - auth/missing-multi-factor-auth
+      - auth/jwt-vulnerabilities
+      - auth/oauth-security-issues
+
+# Optimized paths for monolithic applications
+paths:
+  - "src/main/java/**"
+  - "modules/*/src/main/java/**"
+  - "components/*/src/main/java/**"
+  - "services/*/src/main/java/**"
+  - "!src/test/**"
+  - "!modules/*/src/test/**"
+  - "!**/*Test.java"
+  - "!**/*TestCase.java"
+
+paths-ignore:
+  - "**/*.test.java"
+  - "**/target/**"
+  - "**/build/**"
+  - "**/*.md"
+  - "**/docs/**"
+  - "**/test-data/**"
+  - "**/mock-data/**"
+  - "**/*Mock*.java"
+  - "**/*Stub*.java"
+  - "**/generated/**"
+  - "**/vendor/**"
+
+# Performance optimizations for large codebases
+packs:
+  # Use CodeQL query packs for better performance
+  - codeql/java-queries@~0.4.0
+  - codeql/java-security-queries@~0.4.0
+
+# External query registries for BFSI
+registries:
+  - url: "https://github.com/github/codeql-queries-bfsi"
+    packages: 
+      - "bfsi/java-security-queries@~1.0.0"
+      - "rbi/compliance-queries@~1.0.0"
+      - "sebi/governance-queries@~1.0.0"
+      - "iso27001/security-controls@~1.0.0"
+
+# Build command optimization for monolithic apps
+build-mode: manual
+
+# Additional configuration for large monolithic applications
+ml-powered-queries: true
+
+# Threat model configuration for financial services
+threat-models:
+  - "financial-services"
+  - "payment-processing"
+  - "customer-data-protection"
+  - "regulatory-compliance"
+
+# Performance tuning for monolithic applications
+performance:
+  max-memory: "8192M"
+  max-threads: 4
+  timeout: "120m"
+  
+# Severity thresholds for financial applications
+severity-thresholds:
+  error: "critical"
+  warning: "high"
+  note: "medium"
+  
+# Compliance reporting configuration
+compliance-reporting:
+  enabled: true
+  standards:
+    - "ISO27001"
+    - "RBI-IT-Framework"
+    - "SEBI-Guidelines"
+    - "IRDAI-Guidelines"
+    - "PCI-DSS"
+  output-format: "sarif"
+  include-remediation: true
