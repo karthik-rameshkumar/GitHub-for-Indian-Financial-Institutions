@@ -1,0 +1,128 @@
+name: 'BFSI Java Spring Boot CI/CD'
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  JAVA_VERSION: '17'
+  REGISTRY: 'your-private-registry.com'
+  IMAGE_NAME: 'your-application-name'
+
+jobs:
+  security-scan:
+    name: 'Security Scanning'
+    runs-on: [self-hosted, bfsi-secure]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Security Scanning'
+        uses: ./actions/shared/actions/security-scan
+        with:
+          severity-threshold: 'high'
+          enable-codeql: 'true'
+          enable-dependency-check: 'true'
+          enable-container-scan: 'true'
+          
+  build-and-test:
+    name: 'Build and Test'
+    needs: security-scan
+    runs-on: [self-hosted, bfsi-build]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Build and Test'
+        uses: ./actions/shared/actions/java-build-test
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          test-coverage-threshold: '80'
+          enable-sonar: 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          
+  compliance-check:
+    name: 'Compliance Validation'
+    needs: build-and-test
+    runs-on: [self-hosted, bfsi-compliance]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'RBI Compliance Validation'
+        uses: ./actions/shared/actions/rbi-compliance-check
+        with:
+          framework-version: '2021'
+          data-localization-check: 'true'
+          audit-trail-check: 'true'
+          encryption-check: 'true'
+          
+  docker-build:
+    name: 'Docker Build'
+    needs: [build-and-test, compliance-check]
+    runs-on: [self-hosted, bfsi-build]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Download build artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: target/
+          
+      - name: 'Build Docker image'
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          
+      - name: 'Scan Docker image'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'docker-trivy-results.sarif'
+          
+      - name: 'Upload Docker scan results'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'docker-trivy-results.sarif'
+          
+  deploy-dev:
+    name: 'Deploy to Development'
+    needs: docker-build
+    runs-on: [self-hosted, bfsi-deploy]
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+    steps:
+      - name: 'Deploy to Development Environment'
+        run: |
+          echo "Deploying ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} to development"
+          # Add your deployment commands here
+          
+  deploy-uat:
+    name: 'Deploy to UAT'
+    needs: docker-build
+    runs-on: [self-hosted, bfsi-deploy]
+    if: github.ref == 'refs/heads/main'
+    environment: uat
+    steps:
+      - name: 'Deploy to UAT Environment'
+        run: |
+          echo "Deploying ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} to UAT"
+          # Add your deployment commands here
+          
+  deploy-production:
+    name: 'Deploy to Production'
+    needs: [docker-build, deploy-uat]
+    runs-on: [self-hosted, bfsi-deploy]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: 'Deploy to Production Environment'
+        run: |
+          echo "Deploying ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} to production"
+          # Add your deployment commands here

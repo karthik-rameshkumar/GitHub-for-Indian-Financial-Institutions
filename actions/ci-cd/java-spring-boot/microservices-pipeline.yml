@@ -1,0 +1,216 @@
+name: 'Spring Boot Microservices CI/CD'
+on:
+  push:
+    branches: [ main, develop, 'feature/*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  JAVA_VERSION: '17'
+  MAVEN_OPTS: '-Xmx3072m'
+  REGISTRY: 'your-private-registry.com'
+
+jobs:
+  detect-changes:
+    name: 'Detect Service Changes'
+    runs-on: [self-hosted, bfsi-build]
+    outputs:
+      services: ${{ steps.changes.outputs.services }}
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 'Detect changed services'
+        id: changes
+        run: |
+          # Detect which microservices have changed
+          changed_services=$(git diff --name-only HEAD~1 HEAD | grep -E '^services/[^/]+/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+          echo "services=$changed_services" >> $GITHUB_OUTPUT
+          echo "Changed services: $changed_services"
+
+  build-service:
+    name: 'Build ${{ matrix.service }}'
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.services != '[]' }}
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+      fail-fast: false
+    runs-on: [self-hosted, bfsi-build]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Set up JDK ${{ env.JAVA_VERSION }}'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          
+      - name: 'Cache Maven dependencies'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ matrix.service }}-${{ hashFiles(format('services/{0}/pom.xml', matrix.service)) }}
+          restore-keys: |
+            ${{ runner.os }}-m2-${{ matrix.service }}-
+            ${{ runner.os }}-m2-
+            
+      - name: 'Build ${{ matrix.service }}'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          mvn clean compile test package -B \
+            -Dmaven.test.failure.ignore=false \
+            -Djacoco.skip=false
+            
+      - name: 'Run service-specific tests'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          # Unit tests
+          mvn test -B
+          
+          # Integration tests
+          mvn verify -B -Dspring.profiles.active=test
+          
+      - name: 'Generate test reports'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          mvn jacoco:report
+          mvn surefire-report:report
+          
+      - name: 'Build Docker image'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }} .
+          docker build -t ${{ env.REGISTRY }}/${{ matrix.service }}:latest .
+          
+      - name: 'Security scan service'
+        uses: ./actions/shared/actions/security-scan
+        with:
+          severity-threshold: 'high'
+          
+      - name: 'Upload artifacts'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-artifacts
+          path: |
+            services/${{ matrix.service }}/target/*.jar
+            services/${{ matrix.service }}/target/site/jacoco/
+            services/${{ matrix.service }}/target/surefire-reports/
+          retention-days: 30
+
+  integration-tests:
+    name: 'Integration Tests'
+    needs: build-service
+    runs-on: [self-hosted, bfsi-integration]
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:6
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Download all service artifacts'
+        uses: actions/download-artifact@v4
+        
+      - name: 'Set up test environment'
+        run: |
+          # Start services for integration testing
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30
+          
+      - name: 'Run end-to-end tests'
+        run: |
+          # Run comprehensive integration tests
+          mvn test -Pintegration-tests -B
+          
+      - name: 'Run contract tests'
+        run: |
+          # Pact contract testing
+          mvn test -Pcontract-tests -B
+          
+      - name: 'Cleanup test environment'
+        if: always()
+        run: |
+          docker-compose -f docker-compose.test.yml down
+
+  security-compliance:
+    name: 'Security & Compliance'
+    needs: build-service
+    runs-on: [self-hosted, bfsi-security]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'RBI Compliance Check'
+        uses: ./actions/shared/actions/rbi-compliance-check
+        with:
+          framework-version: '2021'
+          
+      - name: 'OWASP ZAP API Scan'
+        run: |
+          # Start application for API scanning
+          docker run -d --name api-test \
+            -p 8080:8080 \
+            ${{ env.REGISTRY }}/api-gateway:${{ github.sha }}
+          sleep 30
+          
+          # Run ZAP API scan
+          docker run -t owasp/zap2docker-stable zap-api-scan.py \
+            -t http://localhost:8080/v3/api-docs \
+            -f openapi \
+            -J zap-api-report.json || true
+            
+          docker stop api-test
+          docker rm api-test
+
+  deploy-staging:
+    name: 'Deploy to Staging'
+    needs: [integration-tests, security-compliance]
+    if: github.ref == 'refs/heads/develop'
+    runs-on: [self-hosted, bfsi-deploy]
+    environment: staging
+    steps:
+      - name: 'Deploy microservices'
+        run: |
+          echo "Deploying microservices to staging environment"
+          # Add deployment commands using Kubernetes, Docker Swarm, etc.
+          
+      - name: 'Smoke tests'
+        run: |
+          echo "Running smoke tests in staging"
+          # Add smoke test commands
+
+  deploy-production:
+    name: 'Deploy to Production'
+    needs: [integration-tests, security-compliance]
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, bfsi-deploy]
+    environment: production
+    steps:
+      - name: 'Blue-Green Deployment'
+        run: |
+          echo "Executing blue-green deployment to production"
+          # Add blue-green deployment logic
+          
+      - name: 'Post-deployment validation'
+        run: |
+          echo "Running post-deployment validation"
+          # Add validation commands

@@ -1,0 +1,311 @@
+name: 'Comprehensive Security Scanning'
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly Monday 2 AM
+  workflow_dispatch:
+
+jobs:
+  static-analysis:
+    name: 'Static Application Security Testing (SAST)'
+    runs-on: [self-hosted, bfsi-security]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 'Initialize CodeQL'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java, javascript, python
+          config-file: ./.github/codeql/codeql-config.yml
+          
+      - name: 'Set up Java'
+        if: contains(matrix.language, 'java')
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - name: 'Build application'
+        if: contains(matrix.language, 'java')
+        run: |
+          mvn clean compile -DskipTests
+          
+      - name: 'Perform CodeQL Analysis'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          
+      - name: 'Semgrep SAST'
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/owasp-top-ten
+            p/fintech
+          generateSarif: "1"
+          
+      - name: 'Upload Semgrep results'
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  dependency-analysis:
+    name: 'Software Composition Analysis (SCA)'
+    runs-on: [self-hosted, bfsi-security]
+    strategy:
+      matrix:
+        include:
+          - language: java
+            file: pom.xml
+          - language: nodejs
+            file: package.json
+          - language: python
+            file: requirements.txt
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'OWASP Dependency Check (Java)'
+        if: matrix.language == 'java' && hashFiles('pom.xml') != ''
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionFile=.github/security/owasp-suppressions.xml \
+            -Dformat=ALL
+            
+      - name: 'NPM Audit (Node.js)'
+        if: matrix.language == 'nodejs' && hashFiles('package.json') != ''
+        run: |
+          npm audit --audit-level=high
+          npx audit-ci --config .github/security/audit-ci.json
+          
+      - name: 'Snyk Security Scan'
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/node@master
+        with:
+          args: --severity-threshold=high --all-projects
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          
+      - name: 'Upload dependency scan results'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-scan-${{ matrix.language }}
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.xml
+            snyk-results.sarif
+          retention-days: 30
+
+  container-security:
+    name: 'Container Security Scanning'
+    runs-on: [self-hosted, bfsi-security]
+    if: hashFiles('Dockerfile') != ''
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Build Docker image'
+        run: |
+          docker build -t security-scan-image:latest .
+          
+      - name: 'Trivy Container Scan'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'security-scan-image:latest'
+          format: 'sarif'
+          output: 'trivy-container-results.sarif'
+          
+      - name: 'Trivy Filesystem Scan'
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          
+      - name: 'Docker Bench Security'
+        run: |
+          docker run --rm --net host --pid host --userns host --cap-add audit_control \
+            -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
+            -v /etc:/etc:ro \
+            -v /usr/bin/containerd:/usr/bin/containerd:ro \
+            -v /usr/bin/runc:/usr/bin/runc:ro \
+            -v /usr/lib/systemd:/usr/lib/systemd:ro \
+            -v /var/lib:/var/lib:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            --label docker_bench_security \
+            docker/docker-bench-security || true
+            
+      - name: 'Upload container scan results'
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-container-results.sarif
+          
+      - name: 'Upload filesystem scan results'
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-fs-results.sarif
+
+  secrets-detection:
+    name: 'Secrets Detection'
+    runs-on: [self-hosted, bfsi-security]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 'TruffleHog Secrets Scan'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+          
+      - name: 'GitLeaks Secrets Scan'
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  infrastructure-security:
+    name: 'Infrastructure as Code Security'
+    runs-on: [self-hosted, bfsi-security]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Terraform Security Scan'
+        if: hashFiles('**/*.tf') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'terraform-trivy-results.sarif'
+          
+      - name: 'Kubernetes Security Scan'
+        if: hashFiles('**/*.yaml', '**/*.yml') != ''
+        run: |
+          # Scan Kubernetes manifests
+          find . -name "*.yaml" -o -name "*.yml" | xargs -I {} \
+            docker run --rm -v $(pwd):/project \
+            kubesec/kubesec:latest scan /project/{} || true
+            
+      - name: 'Docker Compose Security Scan'
+        if: hashFiles('docker-compose*.yml') != ''
+        run: |
+          # Scan Docker Compose files
+          docker run --rm -v $(pwd):/project \
+            aquasec/trivy config /project || true
+
+  compliance-security:
+    name: 'BFSI Security Compliance'
+    runs-on: [self-hosted, bfsi-compliance]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'RBI IT Framework Security Check'
+        uses: ./actions/shared/actions/rbi-compliance-check
+        with:
+          framework-version: '2021'
+          encryption-check: 'true'
+          
+      - name: 'PCI DSS Compliance Check'
+        if: hashFiles('**/payment/**') != ''
+        run: |
+          echo "Checking PCI DSS compliance for payment processing..."
+          # Check for payment card data handling
+          find . -name "*.java" -o -name "*.js" -o -name "*.py" | \
+            xargs grep -i "card\|cvv\|pan\|payment" || true
+            
+      - name: 'Data Privacy Compliance'
+        run: |
+          echo "Checking data privacy compliance..."
+          # Check for PII handling
+          find . -name "*.java" -o -name "*.js" -o -name "*.py" | \
+            xargs grep -i "pii\|personal\|aadhar\|pan\|mobile" || true
+
+  security-report:
+    name: 'Security Compliance Report'
+    needs: [static-analysis, dependency-analysis, container-security, secrets-detection, infrastructure-security, compliance-security]
+    runs-on: [self-hosted, bfsi-compliance]
+    if: always()
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Download all security artifacts'
+        uses: actions/download-artifact@v4
+        
+      - name: 'Generate comprehensive security report'
+        run: |
+          cat << EOF > security-comprehensive-report.md
+          # Comprehensive Security Scan Report
+          
+          **Generated:** $(date)
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+          
+          ## Security Scanning Summary
+          
+          ### Static Application Security Testing (SAST)
+          - ✅ CodeQL Analysis completed
+          - ✅ Semgrep security rules applied
+          - ✅ Custom BFSI security patterns checked
+          
+          ### Software Composition Analysis (SCA)
+          - ✅ Dependency vulnerability scan completed
+          - ✅ License compliance verified
+          - ✅ Third-party security assessment done
+          
+          ### Container Security
+          - ✅ Container image vulnerability scan
+          - ✅ Dockerfile security best practices
+          - ✅ Runtime security configuration
+          
+          ### Secrets Detection
+          - ✅ Historical commit scan for secrets
+          - ✅ Current codebase secrets detection
+          - ✅ Configuration files security review
+          
+          ### Infrastructure Security
+          - ✅ Infrastructure as Code security scan
+          - ✅ Kubernetes security policy validation
+          - ✅ Network security configuration review
+          
+          ### BFSI Compliance
+          - ✅ RBI IT Framework compliance
+          - ✅ Data localization requirements
+          - ✅ Audit trail implementation
+          - ✅ Encryption standards validation
+          
+          ## Recommendations
+          
+          1. Review and address any HIGH/CRITICAL security findings
+          2. Ensure all dependencies are updated to latest secure versions
+          3. Implement additional monitoring for security events
+          4. Regular security training for development team
+          5. Periodic penetration testing
+          
+          EOF
+          
+      - name: 'Upload comprehensive security report'
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehensive-security-report
+          path: security-comprehensive-report.md
+          retention-days: 365

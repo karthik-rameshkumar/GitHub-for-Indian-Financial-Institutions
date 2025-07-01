@@ -1,0 +1,56 @@
+name: 'BFSI Security Scan'
+description: 'Comprehensive security scanning for financial applications'
+inputs:
+  severity-threshold:
+    description: 'Minimum severity to fail the build'
+    required: false
+    default: 'high'
+  enable-codeql:
+    description: 'Enable CodeQL analysis'
+    required: false
+    default: 'true'
+  enable-dependency-check:
+    description: 'Enable OWASP dependency check'
+    required: false
+    default: 'true'
+  enable-container-scan:
+    description: 'Enable container security scanning'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: 'CodeQL Analysis'
+      if: ${{ inputs.enable-codeql == 'true' }}
+      uses: github/codeql-action/analyze@v3
+      with:
+        config-file: ./.github/codeql/codeql-config.yml
+        
+    - name: 'OWASP Dependency Check'
+      if: ${{ inputs.enable-dependency-check == 'true' }}
+      shell: bash
+      run: |
+        echo "Running OWASP Dependency Check..."
+        if [ -f "pom.xml" ]; then
+          mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
+        elif [ -f "package.json" ]; then
+          npm audit --audit-level=high
+        else
+          echo "No supported build file found for dependency check"
+        fi
+        
+    - name: 'Container Security Scan'
+      if: ${{ inputs.enable-container-scan == 'true' }}
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: ${{ inputs.severity-threshold }}
+        
+    - name: 'Upload Security Results'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+      continue-on-error: true

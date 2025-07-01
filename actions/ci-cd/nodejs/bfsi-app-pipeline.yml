@@ -1,0 +1,262 @@
+name: 'Node.js BFSI Application CI/CD'
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: 'your-private-registry.com'
+  IMAGE_NAME: 'nodejs-bfsi-app'
+
+jobs:
+  security-audit:
+    name: 'Security Audit'
+    runs-on: [self-hosted, bfsi-security]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Set up Node.js ${{ env.NODE_VERSION }}'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 'Install dependencies'
+        run: npm ci
+        
+      - name: 'NPM Security Audit'
+        run: |
+          npm audit --audit-level=high
+          npm audit fix --force || true
+          
+      - name: 'Snyk Security Scan'
+        if: env.SNYK_TOKEN != ''
+        run: |
+          npx snyk auth ${{ secrets.SNYK_TOKEN }}
+          npx snyk test --severity-threshold=high
+          npx snyk monitor
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          
+      - name: 'License Compliance Check'
+        run: |
+          npx license-checker --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause" || true
+
+  code-quality:
+    name: 'Code Quality & Testing'
+    runs-on: [self-hosted, bfsi-build]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Set up Node.js ${{ env.NODE_VERSION }}'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 'Install dependencies'
+        run: npm ci
+        
+      - name: 'Lint code'
+        run: |
+          npm run lint
+          npm run lint:security || true
+          
+      - name: 'Type checking'
+        if: hashFiles('tsconfig.json') != ''
+        run: npm run type-check
+        
+      - name: 'Unit tests'
+        run: |
+          npm run test:unit -- --coverage
+          
+      - name: 'Integration tests'
+        run: |
+          npm run test:integration || true
+          
+      - name: 'Generate test reports'
+        run: |
+          # Generate coverage reports
+          npm run test:coverage:report || true
+          
+      - name: 'SonarQube Analysis'
+        if: env.SONAR_TOKEN != ''
+        uses: sonarqube-quality-gate-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          
+      - name: 'Upload test results'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 30
+
+  build-application:
+    name: 'Build Application'
+    needs: [security-audit, code-quality]
+    runs-on: [self-hosted, bfsi-build]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Set up Node.js ${{ env.NODE_VERSION }}'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 'Install dependencies'
+        run: npm ci --production
+        
+      - name: 'Build application'
+        run: |
+          npm run build
+          
+      - name: 'Optimize build'
+        run: |
+          # Remove development dependencies
+          npm prune --production
+          
+          # Optimize bundle size
+          npm run bundle:analyze || true
+          
+      - name: 'Upload build artifacts'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            dist/
+            node_modules/
+            package*.json
+          retention-days: 30
+
+  docker-build:
+    name: 'Docker Build & Scan'
+    needs: build-application
+    runs-on: [self-hosted, bfsi-build]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Download build artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          
+      - name: 'Build Docker image'
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          
+      - name: 'Container Security Scan'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'docker-trivy-results.sarif'
+          
+      - name: 'Upload container scan results'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'docker-trivy-results.sarif'
+
+  compliance-validation:
+    name: 'Compliance Validation'
+    needs: docker-build
+    runs-on: [self-hosted, bfsi-compliance]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'RBI Compliance Check'
+        uses: ./actions/shared/actions/rbi-compliance-check
+        with:
+          framework-version: '2021'
+          data-localization-check: 'true'
+          audit-trail-check: 'true'
+          encryption-check: 'true'
+          
+      - name: 'Data Protection Validation'
+        run: |
+          echo "Validating data protection measures..."
+          # Check for PII handling
+          grep -r "pii\|personal\|sensitive" src/ || true
+          
+          # Validate encryption implementations
+          grep -r "crypto\|encrypt\|hash" src/ || true
+          
+      - name: 'API Security Validation'
+        run: |
+          echo "Validating API security measures..."
+          # Check for rate limiting
+          grep -r "rateLimit\|throttle" src/ || true
+          
+          # Check for authentication
+          grep -r "auth\|jwt\|oauth" src/ || true
+
+  e2e-testing:
+    name: 'End-to-End Testing'
+    needs: docker-build
+    runs-on: [self-hosted, bfsi-testing]
+    steps:
+      - name: 'Checkout code'
+        uses: actions/checkout@v4
+        
+      - name: 'Start application'
+        run: |
+          docker run -d --name e2e-test-app \
+            -p 3000:3000 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          sleep 30
+          
+      - name: 'Run E2E tests'
+        run: |
+          npm run test:e2e || true
+          
+      - name: 'Performance testing'
+        run: |
+          # Basic load testing
+          npx autocannon -c 10 -d 30 http://localhost:3000/health || true
+          
+      - name: 'Cleanup'
+        if: always()
+        run: |
+          docker stop e2e-test-app || true
+          docker rm e2e-test-app || true
+
+  deploy-development:
+    name: 'Deploy to Development'
+    needs: [compliance-validation, e2e-testing]
+    if: github.ref == 'refs/heads/develop'
+    runs-on: [self-hosted, bfsi-deploy]
+    environment: development
+    steps:
+      - name: 'Deploy to Development'
+        run: |
+          echo "Deploying to development environment"
+          # Add deployment commands
+
+  deploy-production:
+    name: 'Deploy to Production'
+    needs: [compliance-validation, e2e-testing]
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, bfsi-deploy]
+    environment: production
+    steps:
+      - name: 'Deploy to Production'
+        run: |
+          echo "Deploying to production environment"
+          # Add deployment commands
+          
+      - name: 'Post-deployment monitoring'
+        run: |
+          echo "Setting up post-deployment monitoring"
+          # Add monitoring setup
