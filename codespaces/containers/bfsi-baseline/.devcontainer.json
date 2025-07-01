@@ -1,0 +1,141 @@
+{
+  "name": "BFSI Security Baseline Environment",
+  "dockerFile": "Dockerfile",
+  "context": ".",
+  
+  // Security-hardened development environment
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopContainer",
+  
+  // Minimal port exposure for security
+  "forwardPorts": [8080, 9090],
+  "portsAttributes": {
+    "8080": {
+      "label": "Application Port",
+      "onAutoForward": "silent",
+      "requireLocalPort": true
+    },
+    "9090": {
+      "label": "Metrics/Monitoring",
+      "onAutoForward": "silent",
+      "requireLocalPort": true
+    }
+  },
+  
+  // Security-focused features
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "configureZshAsDefaultShell": false,
+      "installOhMyZsh": false,
+      "upgradePackages": true,
+      "username": "bfsi",
+      "userUid": "1001",
+      "userGid": "1001"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "ppa": false
+    }
+  },
+  
+  // Minimal extensions for security baseline
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Essential security tools only
+        "ms-vscode.vscode-github-copilot",
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-json",
+        
+        // Security scanning
+        "snyk-security.snyk-vulnerability-scanner"
+      ],
+      
+      "settings": {
+        // Security-first settings
+        "git.alwaysSignOff": true,
+        "git.requireGitIdentity": true,
+        "workbench.settings.enableNaturalLanguageSearch": false,
+        "telemetry.telemetryLevel": "off",
+        "extensions.autoUpdate": false,
+        "extensions.autoCheckUpdates": false,
+        
+        // File security
+        "files.exclude": {
+          "**/.env": true,
+          "**/.env.*": true,
+          "**/secrets/": true,
+          "**/credentials/": true,
+          "**/*.key": true,
+          "**/*.pem": true,
+          "**/*.p12": true,
+          "**/*.pfx": true
+        },
+        
+        // Network security
+        "http.proxyStrictSSL": true,
+        "http.systemCertificates": true,
+        
+        // Code security
+        "security.workspace.trust.enabled": true,
+        "security.workspace.trust.startupPrompt": "always"
+      }
+    }
+  },
+  
+  // Security-hardened post-creation
+  "postCreateCommand": "bash .devcontainer/security-setup.sh",
+  
+  // Strict environment variables
+  "containerEnv": {
+    "ENVIRONMENT": "secure-baseline",
+    "SECURITY_MODE": "strict",
+    "AUDIT_ENABLED": "true",
+    "COMPLIANCE_FRAMEWORK": "BFSI",
+    "DATA_RESIDENCY": "INDIA",
+    "TZ": "Asia/Kolkata",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    
+    // Security controls
+    "DISABLE_AUTO_UPDATE": "true",
+    "DISABLE_TELEMETRY": "true",
+    "FORCE_HTTPS": "true",
+    "STRICT_TRANSPORT_SECURITY": "true"
+  },
+  
+  // Strict resource limits
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "16gb"
+  },
+  
+  // Maximum security restrictions
+  "runArgs": [
+    "--security-opt", "no-new-privileges:true",
+    "--cap-drop", "ALL",
+    "--tmpfs", "/tmp:noexec,nosuid,nodev,size=512m",
+    "--read-only",
+    "--security-opt", "apparmor:docker-default",
+    "--security-opt", "seccomp:default"
+  ],
+  
+  // Secure mount configurations
+  "mounts": [
+    "source=bfsi-secure-home,target=/home/bfsi,type=volume",
+    "source=${localWorkspaceFolder}/logs,target=/workspace/logs,type=bind,consistency=delegated,readonly=false"
+  ],
+  
+  // Security user configuration
+  "remoteUser": "bfsi",
+  "containerUser": "bfsi",
+  
+  // Lifecycle hooks with security focus
+  "initializeCommand": "echo 'Initializing BFSI security baseline...'",
+  "onCreateCommand": "echo 'Creating secure container...'",
+  "updateContentCommand": "echo 'Security baseline - updates disabled'",
+  "postStartCommand": "bash .devcontainer/post-start-security.sh"
+}

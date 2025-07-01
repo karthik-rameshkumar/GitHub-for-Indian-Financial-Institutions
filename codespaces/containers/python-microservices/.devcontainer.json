@@ -1,0 +1,203 @@
+{
+  "name": "BFSI Python Microservices Development",
+  "dockerFile": "Dockerfile",
+  "context": ".",
+  
+  // Development environment configuration
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopContainer",
+  
+  // BFSI-specific port configuration
+  "forwardPorts": [8000, 8080, 5432, 6379, 3000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Python FastAPI Service",
+      "onAutoForward": "silent"
+    },
+    "8080": {
+      "label": "Management/Health Endpoints", 
+      "onAutoForward": "silent"
+    },
+    "5432": {
+      "label": "PostgreSQL Database",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis Cache",
+      "onAutoForward": "silent"
+    },
+    "3000": {
+      "label": "Frontend Dev Server",
+      "onAutoForward": "silent"
+    }
+  },
+  
+  // BFSI compliance and security features
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11",
+      "installTools": true,
+      "optimize": true
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "18",
+      "nodeGypDependencies": true,
+      "installYarnUsingApt": true
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": true,
+      "moby": true
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "ppa": true
+    }
+  },
+  
+  // BFSI development tools and extensions
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Python development
+        "ms-python.python",
+        "ms-python.flake8",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "ms-python.pylint",
+        
+        // Security and compliance
+        "ms-vscode.vscode-github-copilot",
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker",
+        
+        // BFSI-specific tools
+        "ms-vscode.test-adapter-converter",
+        "ms-vscode.vscode-json",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        
+        // Database and API tools
+        "ms-mssql.mssql",
+        "humao.rest-client",
+        "rangav.vscode-thunder-client",
+        
+        // Security scanning
+        "snyk-security.snyk-vulnerability-scanner",
+        "tabnine.tabnine-vscode"
+      ],
+      
+      "settings": {
+        // Python configuration
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.linting.flake8Enabled": true,
+        "python.formatting.provider": "black",
+        "python.formatting.blackArgs": ["--line-length=88"],
+        "python.sortImports.args": ["--profile", "black"],
+        
+        // Security settings
+        "files.associations": {
+          "*.env.example": "properties",
+          "*.env.template": "properties"
+        },
+        "files.exclude": {
+          "**/.env": true,
+          "**/.env.local": true,
+          "**/secrets/": true,
+          "**/credentials/": true
+        },
+        
+        // BFSI compliance settings
+        "git.alwaysSignOff": true,
+        "git.requireGitIdentity": true,
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": ["-l"]
+          }
+        },
+        
+        // Code quality and security
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "workbench.settings.enableNaturalLanguageSearch": false,
+        "telemetry.telemetryLevel": "off"
+      }
+    }
+  },
+  
+  // Post-creation script for BFSI setup
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  
+  // Environment variables for BFSI development
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/src",
+    "ENVIRONMENT": "development",
+    "TZ": "Asia/Kolkata",
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "en_US.UTF-8",
+    
+    // BFSI compliance environment
+    "AUDIT_ENABLED": "true",
+    "COMPLIANCE_MODE": "BFSI",
+    "SECURITY_SCAN_ENABLED": "true",
+    "DATA_RESIDENCY": "INDIA",
+    
+    // Development database connections (non-production)
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "DB_NAME": "bfsi_dev",
+    "REDIS_HOST": "localhost",
+    "REDIS_PORT": "6379"
+  },
+  
+  // Resource limits for cost control
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  
+  // Network and security restrictions
+  "runArgs": [
+    "--security-opt", "no-new-privileges:true",
+    "--cap-drop", "ALL",
+    "--cap-add", "NET_BIND_SERVICE",
+    "--tmpfs", "/tmp:noexec,nosuid,size=1g",
+    "--read-only"
+  ],
+  
+  // Mount configurations for persistence and security
+  "mounts": [
+    "source=bfsi-dev-home,target=/home/vscode,type=volume",
+    "source=${localWorkspaceFolder}/.devcontainer/cache,target=/home/vscode/.cache,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/logs,target=/workspace/logs,type=bind,consistency=delegated"
+  ],
+  
+  // Wait for services to be ready
+  "waitFor": "postCreateCommand",
+  
+  // User configuration for security
+  "remoteUser": "vscode",
+  "containerUser": "vscode",
+  
+  // Lifecycle hooks
+  "initializeCommand": "echo 'Initializing BFSI development environment...'",
+  "onCreateCommand": "echo 'Creating BFSI-compliant container...'",
+  "updateContentCommand": "echo 'Updating development dependencies...'",
+  "postStartCommand": "echo 'BFSI development environment ready!'"
+}
