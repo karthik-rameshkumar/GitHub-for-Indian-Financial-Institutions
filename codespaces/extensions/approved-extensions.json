@@ -1,0 +1,381 @@
+{
+  "approved_extensions": {
+    "security_and_compliance": [
+      {
+        "id": "snyk-security.snyk-vulnerability-scanner",
+        "name": "Snyk Vulnerability Scanner",
+        "publisher": "Snyk Security",
+        "category": "Security Analysis",
+        "approval_date": "2024-01-15",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Essential for vulnerability detection in BFSI applications",
+        "approved_for_roles": ["Developer", "Senior Developer", "Security Engineer"],
+        "restrictions": {
+          "network_access": "Limited to Snyk APIs only",
+          "data_transmission": "Code analysis results only",
+          "audit_logging": "Required"
+        }
+      },
+      {
+        "id": "ms-vscode.vscode-github-copilot",
+        "name": "GitHub Copilot",
+        "publisher": "Microsoft",
+        "category": "AI Assistant",
+        "approval_date": "2024-02-01",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Medium",
+        "business_justification": "Enhances developer productivity with AI-powered code suggestions",
+        "approved_for_roles": ["Senior Developer", "Team Lead", "Architect"],
+        "restrictions": {
+          "public_code_suggestions": "Disabled",
+          "telemetry": "Minimal",
+          "audit_logging": "Enhanced"
+        }
+      },
+      {
+        "id": "github.vscode-github-actions",
+        "name": "GitHub Actions",
+        "publisher": "GitHub",
+        "category": "CI/CD",
+        "approval_date": "2024-01-10",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Required for GitHub Actions workflow management",
+        "approved_for_roles": ["Developer", "Senior Developer", "DevOps Engineer"],
+        "restrictions": {
+          "network_access": "GitHub APIs only",
+          "secret_access": "Read-only",
+          "audit_logging": "Required"
+        }
+      }
+    ],
+    
+    "development_tools": [
+      {
+        "id": "ms-python.python",
+        "name": "Python",
+        "publisher": "Microsoft",
+        "category": "Language Support",
+        "approval_date": "2024-01-05",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Core Python development support for BFSI microservices",
+        "approved_for_roles": ["Junior Developer", "Developer", "Senior Developer"],
+        "restrictions": {
+          "telemetry": "Disabled",
+          "auto_updates": "Controlled",
+          "audit_logging": "Standard"
+        }
+      },
+      {
+        "id": "ms-python.flake8",
+        "name": "Flake8",
+        "publisher": "Microsoft",
+        "category": "Code Quality",
+        "approval_date": "2024-01-05",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Code quality enforcement for Python applications",
+        "approved_for_roles": ["Developer", "Senior Developer"],
+        "restrictions": {
+          "configuration_override": "Not allowed",
+          "custom_rules": "Security team approved only"
+        }
+      },
+      {
+        "id": "ms-python.black-formatter",
+        "name": "Black Formatter",
+        "publisher": "Microsoft",
+        "category": "Code Formatting",
+        "approval_date": "2024-01-05",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Consistent code formatting across BFSI projects",
+        "approved_for_roles": ["Developer", "Senior Developer"],
+        "restrictions": {
+          "configuration_override": "Limited",
+          "external_dependencies": "None"
+        }
+      },
+      {
+        "id": "ms-python.pylint",
+        "name": "Pylint",
+        "publisher": "Microsoft",
+        "category": "Static Analysis",
+        "approval_date": "2024-01-08",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Static code analysis for Python security and quality",
+        "approved_for_roles": ["Developer", "Senior Developer"],
+        "restrictions": {
+          "custom_plugins": "Security review required",
+          "external_checkers": "Blocked"
+        }
+      },
+      {
+        "id": "ms-python.mypy",
+        "name": "Mypy Type Checker",
+        "publisher": "Microsoft",
+        "category": "Type Checking",
+        "approval_date": "2024-01-08",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Type safety for financial application development",
+        "approved_for_roles": ["Developer", "Senior Developer"],
+        "restrictions": {
+          "configuration_files": "Project-controlled only",
+          "external_stubs": "Approved sources only"
+        }
+      }
+    ],
+    
+    "database_and_api_tools": [
+      {
+        "id": "ms-mssql.mssql",
+        "name": "SQL Server (mssql)",
+        "publisher": "Microsoft",
+        "category": "Database",
+        "approval_date": "2024-01-12",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Medium",
+        "business_justification": "Database connectivity for BFSI applications",
+        "approved_for_roles": ["Senior Developer", "Database Administrator"],
+        "restrictions": {
+          "connection_strings": "Environment variables only",
+          "credential_storage": "Azure Key Vault only",
+          "query_logging": "Required for audit"
+        }
+      },
+      {
+        "id": "humao.rest-client",
+        "name": "REST Client",
+        "publisher": "Huachao Mao",
+        "category": "API Testing",
+        "approval_date": "2024-01-15",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Medium",
+        "business_justification": "API testing for financial services endpoints",
+        "approved_for_roles": ["Developer", "Senior Developer", "QA Engineer"],
+        "restrictions": {
+          "external_requests": "Internal networks only",
+          "credential_usage": "Environment variables only",
+          "request_logging": "Required"
+        }
+      },
+      {
+        "id": "rangav.vscode-thunder-client",
+        "name": "Thunder Client",
+        "publisher": "Ranga Vadhineni",
+        "category": "API Testing",
+        "approval_date": "2024-02-01",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Medium",
+        "business_justification": "Advanced API testing capabilities for BFSI services",
+        "approved_for_roles": ["Senior Developer", "API Developer", "QA Engineer"],
+        "restrictions": {
+          "cloud_sync": "Disabled",
+          "external_sharing": "Blocked",
+          "local_storage_only": "Required"
+        }
+      }
+    ],
+    
+    "productivity_tools": [
+      {
+        "id": "redhat.vscode-yaml",
+        "name": "YAML",
+        "publisher": "Red Hat",
+        "category": "Language Support",
+        "approval_date": "2024-01-05",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "YAML configuration file support for DevOps workflows",
+        "approved_for_roles": ["Developer", "Senior Developer", "DevOps Engineer"],
+        "restrictions": {
+          "schema_validation": "Internal schemas only",
+          "external_references": "Blocked"
+        }
+      },
+      {
+        "id": "ms-vscode.vscode-json",
+        "name": "JSON Language Features",
+        "publisher": "Microsoft",
+        "category": "Language Support",
+        "approval_date": "2024-01-05",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "JSON configuration and data file support",
+        "approved_for_roles": ["Developer", "Senior Developer"],
+        "restrictions": {
+          "schema_downloads": "Internal sources only",
+          "external_validation": "Disabled"
+        }
+      },
+      {
+        "id": "esbenp.prettier-vscode",
+        "name": "Prettier - Code formatter",
+        "publisher": "Prettier",
+        "category": "Code Formatting",
+        "approval_date": "2024-01-10",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Low",
+        "business_justification": "Consistent code formatting for web technologies",
+        "approved_for_roles": ["Frontend Developer", "Full Stack Developer"],
+        "restrictions": {
+          "plugin_installation": "Pre-approved plugins only",
+          "configuration_override": "Team standards only"
+        }
+      },
+      {
+        "id": "ms-azuretools.vscode-docker",
+        "name": "Docker",
+        "publisher": "Microsoft",
+        "category": "Container Development",
+        "approval_date": "2024-01-20",
+        "compliance_frameworks": ["RBI", "SEBI", "IRDAI"],
+        "risk_level": "Medium",
+        "business_justification": "Container development and management for BFSI applications",
+        "approved_for_roles": ["Senior Developer", "DevOps Engineer", "Platform Engineer"],
+        "restrictions": {
+          "registry_access": "Internal registries only",
+          "image_scanning": "Required before push",
+          "privilege_escalation": "Blocked"
+        }
+      }
+    ]
+  },
+  
+  "restricted_extensions": {
+    "require_additional_approval": [
+      {
+        "id": "ms-vsliveshare.vsliveshare",
+        "name": "Live Share",
+        "publisher": "Microsoft",
+        "category": "Collaboration",
+        "risk_level": "High",
+        "restriction_reason": "Real-time code sharing with external parties",
+        "approval_process": "CISO approval required",
+        "alternative_solution": "Screen sharing via approved corporate tools"
+      },
+      {
+        "id": "tabnine.tabnine-vscode",
+        "name": "Tabnine AI Assistant",
+        "publisher": "TabNine",
+        "category": "AI Assistant",
+        "risk_level": "High",
+        "restriction_reason": "External AI service with code analysis",
+        "approval_process": "Security team review and data residency verification",
+        "alternative_solution": "GitHub Copilot with enterprise controls"
+      }
+    ]
+  },
+  
+  "blocked_extensions": {
+    "security_risks": [
+      {
+        "pattern": "*code-runner*",
+        "reason": "Arbitrary code execution capabilities",
+        "risk_level": "Critical",
+        "blocking_mechanism": "Publisher and keyword filtering"
+      },
+      {
+        "pattern": "*remote-ssh*",
+        "reason": "Remote system access capabilities",
+        "risk_level": "Critical",
+        "blocking_mechanism": "Category and functionality filtering"
+      },
+      {
+        "pattern": "*ftp-sync*",
+        "reason": "File transfer to external systems",
+        "risk_level": "High",
+        "blocking_mechanism": "Network access pattern detection"
+      },
+      {
+        "pattern": "*sftp*",
+        "reason": "Secure file transfer capabilities",
+        "risk_level": "High",
+        "blocking_mechanism": "Protocol and functionality filtering"
+      }
+    ],
+    
+    "data_leakage_risks": [
+      {
+        "pattern": "*gist*",
+        "reason": "Code sharing with external services",
+        "risk_level": "High",
+        "blocking_mechanism": "External service communication detection"
+      },
+      {
+        "pattern": "*pastebin*",
+        "reason": "Text/code sharing with public services",
+        "risk_level": "High",
+        "blocking_mechanism": "External API communication filtering"
+      },
+      {
+        "pattern": "*snippet-share*",
+        "reason": "Code snippet sharing capabilities",
+        "risk_level": "Medium",
+        "blocking_mechanism": "Functionality and network access filtering"
+      }
+    ],
+    
+    "unauthorized_ai": [
+      {
+        "pattern": "*openai*",
+        "reason": "Unauthorized AI service integration",
+        "risk_level": "High",
+        "blocking_mechanism": "API endpoint and service detection"
+      },
+      {
+        "pattern": "*chatgpt*",
+        "reason": "External AI assistant integration",
+        "risk_level": "High",
+        "blocking_mechanism": "Service and functionality filtering"
+      },
+      {
+        "pattern": "*claude*",
+        "reason": "External AI service integration",
+        "risk_level": "High",
+        "blocking_mechanism": "API and service communication detection"
+      }
+    ]
+  },
+  
+  "approval_metadata": {
+    "version": "1.0.0",
+    "last_updated": "2024-11-01",
+    "next_review_date": "2025-02-01",
+    "approval_authority": "BFSI Security Committee",
+    "compliance_officer": "Chief Compliance Officer",
+    "security_reviewer": "Chief Information Security Officer",
+    "document_classification": "Internal Use Only",
+    "retention_period": "7 years as per RBI requirements"
+  },
+  
+  "monitoring_configuration": {
+    "usage_tracking": {
+      "metrics_collected": [
+        "Installation count per extension",
+        "Active usage hours per user",
+        "Error rates and performance impact",
+        "Security events per extension",
+        "Compliance violations"
+      ],
+      "reporting_frequency": "Weekly",
+      "alert_thresholds": {
+        "high_error_rate": "5% within 24 hours",
+        "security_event": "Any critical or high severity",
+        "compliance_violation": "Any violation",
+        "performance_impact": ">10% CPU or memory increase"
+      }
+    },
+    
+    "audit_requirements": {
+      "log_retention": "7 years",
+      "log_integrity": "Digital signatures required",
+      "access_logging": "All installation and usage events",
+      "compliance_reporting": "Monthly summary to regulatory teams"
+    }
+  }
+}
