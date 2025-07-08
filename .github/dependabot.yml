@@ -43,10 +43,11 @@ updates:
           - "patch"
           - "security"
       
-      # Security libraries - highest priority
-      security:
+      # Microsoft and GitHub security libraries - highest priority
+      microsoft-security:
         patterns:
-          - "org.owasp*"
+          - "com.microsoft*"
+          - "com.azure*"
           - "com.nimbusds*"
           - "org.bouncycastle*"
           - "org.apache.shiro*"
@@ -79,10 +80,11 @@ updates:
           - "patch"
           - "security"
     
-    # Only allow updates from trusted registries
+    # Only allow updates from trusted Microsoft and open-source registries
     registries:
       - "maven-central"
       - "spring-releases"
+      - "microsoft-maven"
     
     # Ignore patterns for libraries with known issues
     ignore:
@@ -166,17 +168,18 @@ updates:
       - "ci-cd"
     
     groups:
-      # Security-related actions
-      security-actions:
+      # Microsoft and GitHub security actions
+      microsoft-security-actions:
         patterns:
           - "github/codeql-action*"
-          - "aquasecurity/trivy-action*"
-          - "anchore/scan-action*"
+          - "microsoft/security-devops-action*"
+          - "azure/login*"
+          - "actions/dependency-review-action*"
         update-types:
           - "minor"
           - "patch"
 
-# Registry configuration for trusted sources
+# Registry configuration for trusted sources including Microsoft
 registries:
   maven-central:
     type: maven-repository
@@ -185,3 +188,7 @@ registries:
   spring-releases:
     type: maven-repository
     url: https://repo.spring.io/release
+    
+  microsoft-maven:
+    type: maven-repository
+    url: https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/maven/v1

@@ -12,7 +12,6 @@ This document outlines the setup and management of a private extension marketpla
 extension_categories:
   approved_extensions:
     security_tools:
-      - "snyk-security.snyk-vulnerability-scanner"
       - "ms-vscode.vscode-github-copilot"
       - "github.vscode-github-actions"
       - "redhat.vscode-yaml"
