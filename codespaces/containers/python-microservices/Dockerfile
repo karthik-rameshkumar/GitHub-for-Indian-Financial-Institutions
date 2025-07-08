@@ -119,12 +119,11 @@ RUN pip install --no-cache-dir \
     pytest-asyncio==0.21.1 \
     pytest-cov==4.1.0 \
     httpx==0.25.2 \
-    # Code quality and security
+    # Code quality tools (security handled by GitHub Advanced Security)
     black==23.11.0 \
     flake8==6.1.0 \
     pylint==3.0.3 \
     mypy==1.7.1 \
-    bandit==1.7.5 \
     safety==2.3.5 \
     # Monitoring and observability
     prometheus-client==0.19.0 \
@@ -138,7 +137,7 @@ RUN pip install --no-cache-dir \
     rich==13.7.0 \
     typer==0.9.0
 
-# Install Node.js for frontend tooling (if needed)
+# Install Node.js for frontend tooling and Microsoft-compatible tools
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g \
@@ -147,10 +146,20 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
         @angular/cli \
         create-react-app \
         typescript \
-        eslint \
         prettier \
+        @microsoft/eslint-config-security \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Microsoft Application Inspector for security analysis
+RUN curl -s https://api.github.com/repos/microsoft/ApplicationInspector/releases/latest \
+    | grep "browser_download_url.*linux.*tar.gz" \
+    | cut -d '"' -f 4 \
+    | wget -qi - \
+    && tar -xzf ApplicationInspector*.tar.gz \
+    && chmod +x ApplicationInspector \
+    && mv ApplicationInspector /usr/local/bin/ \
+    && rm ApplicationInspector*.tar.gz
 
 # Install Docker CLI for container operations
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \

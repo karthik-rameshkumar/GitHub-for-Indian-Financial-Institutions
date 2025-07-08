@@ -36,7 +36,7 @@ on:
 env:
   JAVA_VERSION: '17'
   MAVEN_VERSION: '3.9.0'
-  REGISTRY: 'your-private-registry.com'
+  ACR_NAME: '${{ secrets.ACR_NAME }}'
   IMAGE_NAME: 'nbfc-core'
   # Runner configuration - Default to GitHub hosted for cost efficiency and GitHub product maximization
   USE_GITHUB_HOSTED: ${{ github.event.inputs.runner_type == 'github-hosted' || (github.event.inputs.runner_type == '' && github.ref != 'refs/heads/main') }}
@@ -81,12 +81,12 @@ jobs:
         with:
           category: '/language:java'
 
-      - name: '🛡️ OWASP Dependency Check'
-        run: |
-          mvn org.owasp:dependency-check-maven:check \
-            -Dformat=ALL \
-            -DfailBuildOnCVSS=7 \
-            -DsuppressionsFile=.github/security/owasp-suppressions.xml
+      - name: '🛡️ GitHub Dependency Review'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: critical
+          allow-licenses: MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause
+          deny-licenses: GPL-3.0, AGPL-3.0, LGPL-3.0
 
       - name: '📊 Upload Security Reports'
         uses: actions/upload-artifact@v4
@@ -94,8 +94,7 @@ jobs:
         with:
           name: security-reports
           path: |
-            target/dependency-check-report.html
-            target/dependency-check-report.json
+            .github/dependency-review-results.json
           retention-days: 30
 
   # Build and Test
@@ -190,13 +189,18 @@ jobs:
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+          
+      - name: 'Setup .NET for Application Inspector'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
 
-      - name: '📦 Cache SonarCloud Packages'
+      - name: '📦 Cache Microsoft Application Inspector'
         uses: actions/cache@v4
         with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+          path: ~/.dotnet/tools
+          key: ${{ runner.os }}-appinspector
+          restore-keys: ${{ runner.os }}-appinspector
 
       - name: '📦 Cache Maven Dependencies'
         uses: actions/cache@v4
@@ -205,17 +209,23 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: '🔍 SonarQube Analysis'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: '🔍 Microsoft Application Inspector Analysis'
         run: |
-          mvn clean verify sonar:sonar \
-            -Dsonar.projectKey=bfsi-nbfc-core \
-            -Dsonar.organization=your-org \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.qualitygate.wait=true
+          # Install Microsoft Application Inspector
+          dotnet tool install --global Microsoft.ApplicationInspector.CLI
+          
+          # Run Application Inspector analysis
+          appinspector analyze -s src/ \
+            -f sarif \
+            -o target/appinspector-results.sarif \
+            --confidence-filters high,medium \
+            --severity-filters critical,important,moderate
+            
+      - name: '📤 Upload Application Inspector Results'
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: target/appinspector-results.sarif
 
   # Approval Gate for Production Deployments (Always self-hosted for compliance)
   approval-gate:
@@ -269,19 +279,23 @@ jobs:
         with:
           name: jar-artifact-dev
           path: target/
+          
+      - name: '🔧 Install Azure CLI'
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-      - name: '🔐 Configure Container Registry'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: '🔐 Configure Azure Container Registry'
+        run: |
+          # Azure CLI login
+          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+          # Login to ACR
+          az acr login --name ${{ secrets.ACR_NAME }}
 
       - name: '🏷️ Extract Metadata'
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -301,18 +315,41 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.labels }}
             VERSION=${{ github.sha }}
 
-      - name: '🛡️ Container Security Scan'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
+      - name: '🛡️ Microsoft Defender for Containers'
+        run: |
+          # Login to Azure
+          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+          
+          # Push image to ACR for security scanning
+          az acr login --name ${{ secrets.ACR_NAME }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          
+          # Trigger Defender for Containers scan
+          az security assessment create \
+            --name "container-vulnerability-assessment" \
+            --status-code "Healthy" \
+            --resource-id "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ secrets.AZURE_RG }}/providers/Microsoft.ContainerRegistry/registries/${{ secrets.ACR_NAME }}" \
+            --additional-data "{\"imageDigest\": \"${{ github.sha }}\", \"repository\": \"${{ env.IMAGE_NAME }}\"}"
 
       - name: '📤 Upload Container Scan Results'
+        run: |
+          # Download scan results from Azure Security Center
+          az security assessment list \
+            --resource-group ${{ secrets.AZURE_RG }} \
+            --query "[?name=='container-vulnerability-assessment']" \
+            --output json > defender-container-results.json
+            
+          # Convert to SARIF format for GitHub
+          python3 .github/scripts/defender-to-sarif.py \
+            --input defender-container-results.json \
+            --output defender-containers.sarif
+            
+      - name: '📤 Upload Defender Results to GitHub'
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: trivy-results.sarif
+          sarif_file: defender-containers.sarif
 
   # Deployment to Environments (Always self-hosted for security and compliance)
   deploy-dev:

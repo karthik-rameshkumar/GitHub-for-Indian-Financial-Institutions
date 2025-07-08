@@ -171,7 +171,7 @@ cp codespaces/containers/bfsi-baseline/security-setup.sh .devcontainer/
       "extensions": [
         "ms-python.python",
         "ms-python.flake8",
-        "snyk-security.snyk-vulnerability-scanner"
+        "github.vscode-github-actions"
       ]
     }
   },
