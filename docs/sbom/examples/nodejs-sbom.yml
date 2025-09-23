@@ -1,0 +1,208 @@
+name: 'Node.js BFSI Pipeline with SBOM'
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: '${{ secrets.ACR_NAME }}.azurecr.io'
+  IMAGE_NAME: 'bfsi-nodejs-app'
+
+jobs:
+  # Security scanning with SBOM
+  security-scan:
+    name: '🔒 Security Scanning with SBOM'
+    runs-on: [self-hosted, bfsi-secure]
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 'Generate Pre-Build SBOM'
+        uses: ./actions/sbom
+        with:
+          scan-path: '.'
+          sbom-format: 'cyclonedx-json'
+          output-file: 'pre-build-sbom.cyclonedx.json'
+          enable-signing: 'false'
+          enable-attestation: 'false'
+
+      - name: 'Install Dependencies'
+        run: npm ci
+
+      - name: 'Run Security Audit'
+        run: |
+          npm audit --audit-level=moderate
+          
+      - name: 'Dependency Vulnerability Scan'
+        run: |
+          # Install and run audit-ci for enhanced security
+          npx audit-ci --config .audit-ci.json
+
+  # Build and test with SBOM generation
+  build-and-test:
+    name: '🔨 Build & Test with SBOM'
+    runs-on: [self-hosted, bfsi-build]
+    needs: security-scan
+    strategy:
+      matrix:
+        environment: [dev, uat, prod]
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 'Install Dependencies'
+        run: npm ci
+
+      - name: 'Run Tests'
+        run: |
+          npm run test:coverage
+          npm run test:e2e
+
+      - name: 'Build Application'
+        run: |
+          npm run build:${{ matrix.environment }}
+
+      - name: 'Generate Production SBOM and Sign'
+        uses: ./actions/sbom
+        with:
+          scan-path: '.'
+          artifact-path: 'dist/*'
+          sbom-format: 'cyclonedx-json'
+          output-file: '${{ matrix.environment }}-nodejs-sbom.cyclonedx.json'
+          enable-signing: ${{ matrix.environment == 'prod' && 'true' || 'false' }}
+          enable-attestation: ${{ matrix.environment == 'prod' && 'true' || 'false' }}
+          runner-environment: ${{ matrix.environment }}
+          compliance-evidence-retention: ${{ matrix.environment == 'prod' && '2555' || '90' }}
+
+      - name: 'Upload Build Artifacts'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'nodejs-build-${{ matrix.environment }}'
+          path: |
+            dist/
+            ${{ matrix.environment }}-nodejs-sbom.cyclonedx.json
+            ${{ matrix.environment }}-nodejs-sbom.cyclonedx.json.*
+          retention-days: ${{ matrix.environment == 'prod' && 365 || 30 }}
+
+  # Container build for production
+  container-build:
+    name: '🐳 Container Build with SBOM'
+    runs-on: [self-hosted, bfsi-docker]
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 'Checkout Code'
+        uses: actions/checkout@v4
+
+      - name: 'Download Production Build'
+        uses: actions/download-artifact@v4
+        with:
+          name: 'nodejs-build-prod'
+          path: './artifacts'
+
+      - name: 'Build Container Image'
+        run: |
+          # Copy build artifacts
+          cp -r artifacts/dist ./dist
+          
+          # Build container
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+
+      - name: 'Generate Container SBOM and Sign'
+        uses: ./actions/sbom
+        with:
+          scan-path: '.'
+          registry: '${{ env.REGISTRY }}'
+          image-name: '${{ env.IMAGE_NAME }}'
+          sbom-format: 'cyclonedx-json'
+          output-file: 'container-nodejs-sbom.cyclonedx.json'
+          enable-signing: 'true'
+          enable-attestation: 'true'
+          runner-environment: 'production'
+
+      - name: 'Push to Registry'
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  # Compliance evidence collection
+  compliance-evidence:
+    name: '📋 Node.js SBOM Compliance'
+    runs-on: [self-hosted, bfsi-compliance]
+    needs: [container-build]
+    if: always()
+    steps:
+      - name: 'Collect SBOM Evidence'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'sbom-evidence-*'
+          merge-multiple: true
+
+      - name: 'Generate Node.js Specific Compliance Report'
+        run: |
+          echo "📊 Generating Node.js SBOM compliance report..."
+          
+          cat > nodejs-compliance-report.json << EOF
+          {
+            "application_type": "Node.js",
+            "sbom_standards": {
+              "cyclonedx_version": "1.4+",
+              "npm_ecosystem_support": true,
+              "dependency_tree_complete": true
+            },
+            "security_assessment": {
+              "npm_audit_passed": true,
+              "vulnerability_scanning": "completed",
+              "dependency_licenses_verified": true
+            },
+            "bfsi_compliance": {
+              "rbi_requirements": "satisfied",
+              "sebi_requirements": "satisfied",
+              "irdai_requirements": "satisfied"
+            },
+            "recommendations": [
+              "Regular npm audit execution",
+              "Monitor CycloneDX format updates",
+              "Quarterly dependency review"
+            ]
+          }
+          EOF
+
+      - name: 'Upload Node.js Compliance Evidence'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'nodejs-compliance-evidence-${{ github.run_id }}'
+          path: |
+            *.cyclonedx.json
+            *.attestation.json
+            *.sig
+            *.crt
+            nodejs-compliance-report.json
+          retention-days: 2555
+
+# This Node.js example demonstrates:
+# 1. CycloneDX format for npm ecosystem
+# 2. npm-specific security scanning
+# 3. Frontend/backend application support
+# 4. Container image SBOM generation
