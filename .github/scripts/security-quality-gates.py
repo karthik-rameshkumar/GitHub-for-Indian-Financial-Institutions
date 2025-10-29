@@ -137,13 +137,12 @@ class SecurityQualityGates:
         """Check BFSI-specific security rules using pre-parsed files"""
         violations = []
         
-        # Critical rules for financial applications - use set for O(1) lookup
-        critical_rules = {
-            'payment-data-exposure',
-            'weak-transaction-encryption', 
-            'pii-exposure',
-            'rbi-data-localization'
-        }
+        # Pre-compile critical rules as regex pattern for efficient matching
+        import re
+        critical_rules_pattern = re.compile(
+            r'\b(payment-data-exposure|weak-transaction-encryption|pii-exposure|rbi-data-localization)\b',
+            re.IGNORECASE
+        )
         
         found_critical_violations = []
         
@@ -151,18 +150,17 @@ class SecurityQualityGates:
         for sarif_file, sarif_data in parsed_files:
             for run in sarif_data.get('runs', []):
                 for result in run.get('results', []):
-                    rule_id = result.get('ruleId', '').lower()
+                    rule_id = result.get('ruleId', '')
                     
-                    # Check for critical financial rules using efficient set lookup
-                    for rule in critical_rules:
-                        if rule in rule_id:
-                            found_critical_violations.append({
-                                'rule': rule,
-                                'rule_id': result.get('ruleId', ''),
-                                'message': result.get('message', {}).get('text', ''),
-                                'level': result.get('level', 'note')
-                            })
-                            break  # Only record first matching rule per finding
+                    # Check for critical financial rules using regex pattern - O(1) operation
+                    match = critical_rules_pattern.search(rule_id)
+                    if match:
+                        found_critical_violations.append({
+                            'rule': match.group(1).lower(),
+                            'rule_id': rule_id,
+                            'message': result.get('message', {}).get('text', ''),
+                            'level': result.get('level', 'note')
+                        })
         
         # Any critical financial rule violation fails the build
         if found_critical_violations:
