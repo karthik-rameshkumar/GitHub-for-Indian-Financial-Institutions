@@ -14,6 +14,7 @@ import json
 import argparse
 import os
 import sys
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -51,6 +52,26 @@ class ComplianceReportGenerator:
                 "compliance_percentage": 100.0,
                 "findings_by_control": {}
             }
+        
+        # Pre-compile regex patterns for ISO27001 mapping
+        self._iso_patterns = {
+            'A.12.6.1': re.compile(r'\b(sql-injection|xss|vulnerability)\b', re.IGNORECASE),
+            'A.10.1.1': re.compile(r'\b(crypto|encryption|cipher|hash)\b', re.IGNORECASE),
+            'A.9.1.1': re.compile(r'\b(auth|access|authorization)\b', re.IGNORECASE)
+        }
+        
+        # Pre-compile regex patterns for RBI Framework mapping
+        self._rbi_patterns = {
+            'RBI-IT-4.2.1': re.compile(r'\b(sql-injection|xss|injection)\b', re.IGNORECASE),
+            'RBI-IT-4.1.3': re.compile(r'\b(auth|session|access)\b', re.IGNORECASE),
+            'RBI-IT-4.3.3': re.compile(r'\b(pii|personal|data-protection)\b', re.IGNORECASE)
+        }
+        
+        # Pre-compile regex patterns for SEBI Guidelines mapping
+        self._sebi_patterns = {
+            'SEBI-SG-2.1': re.compile(r'\b(governance|policy|procedure)\b', re.IGNORECASE),
+            'SEBI-DI-3.1': re.compile(r'\b(data-integrity|validation|consistency)\b', re.IGNORECASE)
+        }
             
     def generate_report(self, sarif_dir: str, output_dir: str) -> None:
         """Generate compliance report from SARIF files."""
@@ -137,93 +158,65 @@ class ComplianceReportGenerator:
     def _map_to_iso27001(self, rule_id: str, level: str) -> List[Dict[str, str]]:
         """Map finding to ISO 27001 controls."""
         mappings = []
-        rule_lower = rule_id.lower()
         
-        # A.12.6.1 - Management of technical vulnerabilities
-        if any(term in rule_lower for term in ['sql-injection', 'xss', 'vulnerability']):
-            mappings.append({
-                "framework": "ISO27001",
-                "control": "A.12.6.1",
-                "description": "Management of technical vulnerabilities",
-                "severity_impact": level
-            })
-            
-        # A.10.1.1 - Policy on the use of cryptographic controls
-        if any(term in rule_lower for term in ['crypto', 'encryption', 'cipher', 'hash']):
-            mappings.append({
-                "framework": "ISO27001",
-                "control": "A.10.1.1",
-                "description": "Policy on the use of cryptographic controls",
-                "severity_impact": level
-            })
-            
-        # A.9.1.1 - Access control policy
-        if any(term in rule_lower for term in ['auth', 'access', 'authorization']):
-            mappings.append({
-                "framework": "ISO27001",
-                "control": "A.9.1.1",
-                "description": "Access control policy",
-                "severity_impact": level
-            })
+        # Use pre-compiled patterns for better performance
+        control_descriptions = {
+            'A.12.6.1': "Management of technical vulnerabilities",
+            'A.10.1.1': "Policy on the use of cryptographic controls",
+            'A.9.1.1': "Access control policy"
+        }
+        
+        for control, pattern in self._iso_patterns.items():
+            if pattern.search(rule_id):
+                mappings.append({
+                    "framework": "ISO27001",
+                    "control": control,
+                    "description": control_descriptions[control],
+                    "severity_impact": level
+                })
             
         return mappings
         
     def _map_to_rbi_framework(self, rule_id: str, level: str) -> List[Dict[str, str]]:
         """Map finding to RBI IT Framework controls."""
         mappings = []
-        rule_lower = rule_id.lower()
         
-        # RBI-IT-4.2.1 - Application Security
-        if any(term in rule_lower for term in ['sql-injection', 'xss', 'injection']):
-            mappings.append({
-                "framework": "RBI-IT-Framework",
-                "control": "RBI-IT-4.2.1",
-                "description": "Application Security - Secure coding practices",
-                "severity_impact": level
-            })
-            
-        # RBI-IT-4.1.3 - Access Control
-        if any(term in rule_lower for term in ['auth', 'session', 'access']):
-            mappings.append({
-                "framework": "RBI-IT-Framework",
-                "control": "RBI-IT-4.1.3",
-                "description": "Access Control and Authentication",
-                "severity_impact": level
-            })
-            
-        # RBI-IT-4.3.3 - Data Protection
-        if any(term in rule_lower for term in ['pii', 'personal', 'data-protection']):
-            mappings.append({
-                "framework": "RBI-IT-Framework",
-                "control": "RBI-IT-4.3.3",
-                "description": "Customer Data Protection",
-                "severity_impact": level
-            })
+        # Use pre-compiled patterns for better performance
+        control_descriptions = {
+            'RBI-IT-4.2.1': "Application Security - Secure coding practices",
+            'RBI-IT-4.1.3': "Access Control and Authentication",
+            'RBI-IT-4.3.3': "Customer Data Protection"
+        }
+        
+        for control, pattern in self._rbi_patterns.items():
+            if pattern.search(rule_id):
+                mappings.append({
+                    "framework": "RBI-IT-Framework",
+                    "control": control,
+                    "description": control_descriptions[control],
+                    "severity_impact": level
+                })
             
         return mappings
         
     def _map_to_sebi_guidelines(self, rule_id: str, level: str) -> List[Dict[str, str]]:
         """Map finding to SEBI Guidelines."""
         mappings = []
-        rule_lower = rule_id.lower()
         
-        # SEBI-SG-2.1 - System Governance
-        if any(term in rule_lower for term in ['governance', 'policy', 'procedure']):
-            mappings.append({
-                "framework": "SEBI-Guidelines",
-                "control": "SEBI-SG-2.1",
-                "description": "System Governance and Risk Management",
-                "severity_impact": level
-            })
-            
-        # SEBI-DI-3.1 - Data Integrity
-        if any(term in rule_lower for term in ['data-integrity', 'validation', 'consistency']):
-            mappings.append({
-                "framework": "SEBI-Guidelines",
-                "control": "SEBI-DI-3.1",
-                "description": "Data Integrity and Validation",
-                "severity_impact": level
-            })
+        # Use pre-compiled patterns for better performance
+        control_descriptions = {
+            'SEBI-SG-2.1': "System Governance and Risk Management",
+            'SEBI-DI-3.1': "Data Integrity and Validation"
+        }
+        
+        for control, pattern in self._sebi_patterns.items():
+            if pattern.search(rule_id):
+                mappings.append({
+                    "framework": "SEBI-Guidelines",
+                    "control": control,
+                    "description": control_descriptions[control],
+                    "severity_impact": level
+                })
             
         return mappings
         

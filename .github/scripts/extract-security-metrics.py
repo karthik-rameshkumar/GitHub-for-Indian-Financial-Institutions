@@ -14,6 +14,7 @@ import json
 import argparse
 import os
 import sys
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -47,6 +48,18 @@ class SecurityMetricsExtractor:
             "scan_coverage": {},
             "risk_score": 0.0
         }
+        
+        # Pre-compile regex patterns for better performance
+        self._payment_pattern = re.compile(r'\b(payment|transaction|financial|credit|debit)\b', re.IGNORECASE)
+        self._data_protection_pattern = re.compile(r'\b(pii|personal|privacy|gdpr|data-protection)\b', re.IGNORECASE)
+        self._auth_pattern = re.compile(r'\b(auth|session|jwt|oauth|login|password)\b', re.IGNORECASE)
+        self._crypto_pattern = re.compile(r'\b(crypto|encrypt|hash|cipher|ssl|tls)\b', re.IGNORECASE)
+        self._compliance_pattern = re.compile(r'\b(compliance|rbi|sebi|iso27001|audit)\b', re.IGNORECASE)
+        
+        # Pre-compile compliance patterns
+        self._rbi_pattern = re.compile(r'\b(sql-injection|xss|crypto|auth|session)\b', re.IGNORECASE)
+        self._iso_pattern = re.compile(r'\b(access-control|encryption|audit|incident)\b', re.IGNORECASE)
+        self._sebi_pattern = re.compile(r'\b(data-integrity|governance|risk)\b', re.IGNORECASE)
         
     def process_sarif_directory(self, sarif_dir: str) -> Dict[str, Any]:
         """Process all SARIF files in the given directory."""
@@ -114,67 +127,39 @@ class SecurityMetricsExtractor:
         
     def _categorize_bfsi_finding(self, rule_id: str, result: Dict[str, Any]) -> None:
         """Categorize findings based on BFSI security domains."""
-        rule_id_lower = rule_id.lower()
-        message = result.get('message', {}).get('text', '').lower()
+        # Combine rule_id and message once for efficient searching
+        combined_text = f"{rule_id} {result.get('message', {}).get('text', '')}"
         
-        # Payment security patterns
-        if any(term in rule_id_lower or term in message for term in [
-            'payment', 'transaction', 'financial', 'credit', 'debit'
-        ]):
+        # Use pre-compiled regex patterns for better performance
+        # Check categories in order of expected frequency
+        if self._payment_pattern.search(combined_text):
             self.metrics["bfsi_specific"]["payment_security"] += 1
-            
-        # Data protection patterns
-        elif any(term in rule_id_lower or term in message for term in [
-            'pii', 'personal', 'privacy', 'gdpr', 'data-protection'
-        ]):
+        elif self._data_protection_pattern.search(combined_text):
             self.metrics["bfsi_specific"]["data_protection"] += 1
-            
-        # Authentication patterns
-        elif any(term in rule_id_lower or term in message for term in [
-            'auth', 'session', 'jwt', 'oauth', 'login', 'password'
-        ]):
+        elif self._auth_pattern.search(combined_text):
             self.metrics["bfsi_specific"]["authentication"] += 1
-            
-        # Encryption patterns
-        elif any(term in rule_id_lower or term in message for term in [
-            'crypto', 'encrypt', 'hash', 'cipher', 'ssl', 'tls'
-        ]):
+        elif self._crypto_pattern.search(combined_text):
             self.metrics["bfsi_specific"]["encryption"] += 1
-            
-        # Regulatory compliance patterns
-        elif any(term in rule_id_lower or term in message for term in [
-            'compliance', 'rbi', 'sebi', 'iso27001', 'audit'
-        ]):
+        elif self._compliance_pattern.search(combined_text):
             self.metrics["bfsi_specific"]["regulatory_compliance"] += 1
             
     def _map_compliance_framework(self, rule_id: str, result: Dict[str, Any]) -> None:
         """Map findings to compliance frameworks."""
+        # Use pre-compiled patterns for better performance
         # RBI IT Framework mapping
-        if any(term in rule_id.lower() for term in [
-            'sql-injection', 'xss', 'crypto', 'auth', 'session'
-        ]):
+        if self._rbi_pattern.search(rule_id):
             framework = "RBI-IT-Framework"
-            if framework not in self.metrics["compliance_mapping"]:
-                self.metrics["compliance_mapping"][framework] = 0
-            self.metrics["compliance_mapping"][framework] += 1
+            self.metrics["compliance_mapping"][framework] = self.metrics["compliance_mapping"].get(framework, 0) + 1
             
         # ISO 27001 mapping
-        if any(term in rule_id.lower() for term in [
-            'access-control', 'encryption', 'audit', 'incident'
-        ]):
+        if self._iso_pattern.search(rule_id):
             framework = "ISO27001"
-            if framework not in self.metrics["compliance_mapping"]:
-                self.metrics["compliance_mapping"][framework] = 0
-            self.metrics["compliance_mapping"][framework] += 1
+            self.metrics["compliance_mapping"][framework] = self.metrics["compliance_mapping"].get(framework, 0) + 1
             
         # SEBI mapping
-        if any(term in rule_id.lower() for term in [
-            'data-integrity', 'governance', 'risk'
-        ]):
+        if self._sebi_pattern.search(rule_id):
             framework = "SEBI-Guidelines"
-            if framework not in self.metrics["compliance_mapping"]:
-                self.metrics["compliance_mapping"][framework] = 0
-            self.metrics["compliance_mapping"][framework] += 1
+            self.metrics["compliance_mapping"][framework] = self.metrics["compliance_mapping"].get(framework, 0) + 1
             
     def _calculate_risk_score(self) -> None:
         """Calculate overall risk score based on findings."""
