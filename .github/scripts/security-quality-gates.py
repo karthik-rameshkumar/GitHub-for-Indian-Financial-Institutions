@@ -153,15 +153,16 @@ class SecurityQualityGates:
                 for result in run.get('results', []):
                     rule_id = result.get('ruleId', '').lower()
                     
-                    # Check for critical financial rules using set intersection
-                    matched_rules = [rule for rule in critical_rules if rule in rule_id]
-                    if matched_rules:
-                        found_critical_violations.append({
-                            'rule': matched_rules[0],
-                            'rule_id': result.get('ruleId', ''),
-                            'message': result.get('message', {}).get('text', ''),
-                            'level': result.get('level', 'note')
-                        })
+                    # Check for critical financial rules using efficient set lookup
+                    for rule in critical_rules:
+                        if rule in rule_id:
+                            found_critical_violations.append({
+                                'rule': rule,
+                                'rule_id': result.get('ruleId', ''),
+                                'message': result.get('message', {}).get('text', ''),
+                                'level': result.get('level', 'note')
+                            })
+                            break  # Only record first matching rule per finding
         
         # Any critical financial rule violation fails the build
         if found_critical_violations:
