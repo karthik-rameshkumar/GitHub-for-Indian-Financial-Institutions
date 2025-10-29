@@ -7,32 +7,34 @@ Processes CodeQL SARIF results for financial services compliance reporting
 import json
 import sys
 import argparse
+import re
 from datetime import datetime
 from pathlib import Path
 
 class SARIFProcessor:
     def __init__(self):
+        # Convert mappings to use regex patterns for efficient matching
         self.rbi_mappings = {
-            "sql-injection": "RBI-IT-4.2.1",
-            "weak-cryptographic-algorithm": "RBI-IT-4.3.2", 
-            "hardcoded-credentials": "RBI-IT-4.1.3",
-            "sensitive-data-exposure": "RBI-IT-4.3.1",
-            "payment-data-exposure": "RBI-IT-4.3.3"
+            re.compile(r'\bsql-injection\b', re.IGNORECASE): ("RBI-IT-4.2.1", "Application Security"),
+            re.compile(r'\bweak-cryptographic-algorithm\b', re.IGNORECASE): ("RBI-IT-4.3.2", "Cryptographic Controls"),
+            re.compile(r'\bhardcoded-credentials\b', re.IGNORECASE): ("RBI-IT-4.1.3", "Access Control"),
+            re.compile(r'\bsensitive-data-exposure\b', re.IGNORECASE): ("RBI-IT-4.3.1", "Data Protection"),
+            re.compile(r'\bpayment-data-exposure\b', re.IGNORECASE): ("RBI-IT-4.3.3", "Payment Security")
         }
         
         self.iso27001_mappings = {
-            "sql-injection": "A.14.2.5",
-            "weak-cryptographic-algorithm": "A.10.1.1",
-            "hardcoded-credentials": "A.9.4.3",
-            "access-control": "A.9.1.1",
-            "authentication": "A.9.2.1"
+            re.compile(r'\bsql-injection\b', re.IGNORECASE): ("A.14.2.5", "Secure Development"),
+            re.compile(r'\bweak-cryptographic-algorithm\b', re.IGNORECASE): ("A.10.1.1", "Cryptographic Controls"),
+            re.compile(r'\bhardcoded-credentials\b', re.IGNORECASE): ("A.9.4.3", "Password Management"),
+            re.compile(r'\baccess-control\b', re.IGNORECASE): ("A.9.1.1", "Access Control Policy"),
+            re.compile(r'\bauthentication\b', re.IGNORECASE): ("A.9.2.1", "User Registration")
         }
         
         self.sebi_mappings = {
-            "system-governance": "SEBI-IT-1.1",
-            "risk-management": "SEBI-IT-2.1", 
-            "data-integrity": "SEBI-IT-3.1",
-            "audit-trail": "SEBI-IT-4.1"
+            re.compile(r'\bsystem-governance\b', re.IGNORECASE): ("SEBI-IT-1.1", "System Governance"),
+            re.compile(r'\brisk-management\b', re.IGNORECASE): ("SEBI-IT-2.1", "Risk Management"),
+            re.compile(r'\bdata-integrity\b', re.IGNORECASE): ("SEBI-IT-3.1", "Data Integrity"),
+            re.compile(r'\baudit-trail\b', re.IGNORECASE): ("SEBI-IT-4.1", "Audit Trail")
         }
 
     def process_sarif_file(self, sarif_path):
@@ -94,33 +96,33 @@ class SARIFProcessor:
 
     def get_rbi_mapping(self, rule_id):
         """Map CodeQL rule to RBI IT Framework controls"""
-        for pattern, mapping in self.rbi_mappings.items():
-            if pattern in rule_id.lower():
+        for pattern, (control, description) in self.rbi_mappings.items():
+            if pattern.search(rule_id):
                 return {
-                    'control': mapping,
-                    'description': f'RBI IT Framework control {mapping}',
+                    'control': control,
+                    'description': f'RBI IT Framework control {control} - {description}',
                     'category': 'Information Security'
                 }
         return None
 
     def get_iso27001_mapping(self, rule_id):
         """Map CodeQL rule to ISO 27001 controls"""
-        for pattern, mapping in self.iso27001_mappings.items():
-            if pattern in rule_id.lower():
+        for pattern, (control, description) in self.iso27001_mappings.items():
+            if pattern.search(rule_id):
                 return {
-                    'control': mapping,
-                    'description': f'ISO 27001 control {mapping}',
+                    'control': control,
+                    'description': f'ISO 27001 control {control} - {description}',
                     'category': 'Information Security Management'
                 }
         return None
 
     def get_sebi_mapping(self, rule_id):
         """Map CodeQL rule to SEBI IT Governance controls"""
-        for pattern, mapping in self.sebi_mappings.items():
-            if pattern in rule_id.lower():
+        for pattern, (control, description) in self.sebi_mappings.items():
+            if pattern.search(rule_id):
                 return {
-                    'control': mapping,
-                    'description': f'SEBI IT Governance {mapping}',
+                    'control': control,
+                    'description': f'SEBI IT Governance {control} - {description}',
                     'category': 'System Governance'
                 }
         return None

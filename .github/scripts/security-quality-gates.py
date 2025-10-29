@@ -52,32 +52,39 @@ class SecurityQualityGates:
             }
         }
 
+    def _parse_sarif_files(self, sarif_dir):
+        """Parse all SARIF files once and cache results"""
+        parsed_files = []
+        for sarif_file in Path(sarif_dir).glob('**/*.sarif'):
+            try:
+                with open(sarif_file, 'r') as f:
+                    sarif_data = json.load(f)
+                parsed_files.append((sarif_file, sarif_data))
+            except Exception as e:
+                print(f"Error parsing SARIF file {sarif_file}: {e}")
+        return parsed_files
+    
     def evaluate_sarif_results(self, sarif_dir):
         """Evaluate SARIF results against quality gates"""
         findings = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
         violations = []
         
-        # Process all SARIF files
-        for sarif_file in Path(sarif_dir).glob('**/*.sarif'):
-            try:
-                with open(sarif_file, 'r') as f:
-                    sarif_data = json.load(f)
-                
-                # Count findings by severity
-                for run in sarif_data.get('runs', []):
-                    for result in run.get('results', []):
-                        level = result.get('level', 'note')
-                        if level == 'error':
-                            findings['critical'] += 1
-                        elif level == 'warning':
-                            findings['high'] += 1
-                        elif level == 'note':
-                            findings['medium'] += 1
-                        else:
-                            findings['low'] += 1
-                            
-            except Exception as e:
-                print(f"Error processing SARIF file {sarif_file}: {e}")
+        # Parse all SARIF files once
+        parsed_files = self._parse_sarif_files(sarif_dir)
+        
+        # Count findings by severity
+        for sarif_file, sarif_data in parsed_files:
+            for run in sarif_data.get('runs', []):
+                for result in run.get('results', []):
+                    level = result.get('level', 'note')
+                    if level == 'error':
+                        findings['critical'] += 1
+                    elif level == 'warning':
+                        findings['high'] += 1
+                    elif level == 'note':
+                        findings['medium'] += 1
+                    else:
+                        findings['low'] += 1
         
         # Evaluate against quality gates
         for severity, count in findings.items():
@@ -94,7 +101,7 @@ class SecurityQualityGates:
                     'message': gate.get('message', f'{severity} findings exceed threshold')
                 })
         
-        return findings, violations
+        return findings, violations, parsed_files
 
     def evaluate_compliance_scores(self, compliance_file):
         """Evaluate compliance scores against quality gates"""
@@ -126,41 +133,34 @@ class SecurityQualityGates:
         
         return violations
 
-    def check_financial_specific_rules(self, sarif_dir):
-        """Check BFSI-specific security rules"""
+    def check_financial_specific_rules(self, parsed_files):
+        """Check BFSI-specific security rules using pre-parsed files"""
         violations = []
         
-        # Critical rules for financial applications
-        critical_rules = [
-            'payment-data-exposure',
-            'weak-transaction-encryption', 
-            'pii-exposure',
-            'rbi-data-localization'
-        ]
+        # Pre-compile critical rules as regex pattern for efficient matching
+        import re
+        critical_rules_pattern = re.compile(
+            r'\b(payment-data-exposure|weak-transaction-encryption|pii-exposure|rbi-data-localization)\b',
+            re.IGNORECASE
+        )
         
         found_critical_violations = []
         
-        for sarif_file in Path(sarif_dir).glob('**/*.sarif'):
-            try:
-                with open(sarif_file, 'r') as f:
-                    sarif_data = json.load(f)
-                
-                for run in sarif_data.get('runs', []):
-                    for result in run.get('results', []):
-                        rule_id = result.get('ruleId', '')
-                        
-                        # Check for critical financial rules
-                        for critical_rule in critical_rules:
-                            if critical_rule in rule_id.lower():
-                                found_critical_violations.append({
-                                    'rule': critical_rule,
-                                    'rule_id': rule_id,
-                                    'message': result.get('message', {}).get('text', ''),
-                                    'level': result.get('level', 'note')
-                                })
-                                
-            except Exception as e:
-                print(f"Error processing SARIF file {sarif_file}: {e}")
+        # Use pre-parsed files instead of re-parsing
+        for sarif_file, sarif_data in parsed_files:
+            for run in sarif_data.get('runs', []):
+                for result in run.get('results', []):
+                    rule_id = result.get('ruleId', '')
+                    
+                    # Check for critical financial rules using regex pattern - O(1) operation
+                    match = critical_rules_pattern.search(rule_id)
+                    if match:
+                        found_critical_violations.append({
+                            'rule': match.group(1).lower(),
+                            'rule_id': rule_id,
+                            'message': result.get('message', {}).get('text', ''),
+                            'level': result.get('level', 'note')
+                        })
         
         # Any critical financial rule violation fails the build
         if found_critical_violations:
@@ -217,16 +217,16 @@ def main():
     
     quality_gates.quality_gates['medium']['max_allowed'] = args.max_medium
     
-    # Evaluate SARIF results
-    findings, security_violations = quality_gates.evaluate_sarif_results(args.sarif_dir)
+    # Evaluate SARIF results (now returns parsed files for reuse)
+    findings, security_violations, parsed_files = quality_gates.evaluate_sarif_results(args.sarif_dir)
     
     # Evaluate compliance scores
     compliance_violations = []
     if args.compliance_file and Path(args.compliance_file).exists():
         compliance_violations = quality_gates.evaluate_compliance_scores(args.compliance_file)
     
-    # Check financial-specific rules
-    financial_violations = quality_gates.check_financial_specific_rules(args.sarif_dir)
+    # Check financial-specific rules (reuse parsed files)
+    financial_violations = quality_gates.check_financial_specific_rules(parsed_files)
     
     # Combine all violations
     all_violations = security_violations + compliance_violations + financial_violations
